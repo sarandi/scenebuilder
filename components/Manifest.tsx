@@ -6,6 +6,7 @@ import type { Entity } from "@/lib/mockData";
 import type { SceneSummary } from "@/lib/api";
 
 type Props = {
+  storyTitle: string;
   entities: Entity[];
   onClose: () => void;
   scenes: SceneSummary[];
@@ -18,6 +19,7 @@ type Props = {
 };
 
 export function Manifest({
+  storyTitle,
   entities,
   onClose,
   scenes,
@@ -68,7 +70,7 @@ export function Manifest({
   return (
     <>
       <div style={{ padding: "16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-        <span style={{ fontSize: "11px", letterSpacing: "0.12em", color: "var(--fg-muted)", fontFamily: "monospace" }}>MANIFEST</span>
+        <span style={{ fontSize: "13px", color: "var(--fg)", fontFamily: "Georgia, serif", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{storyTitle}</span>
         <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "18px", lineHeight: 1 }}>✕</button>
       </div>
 

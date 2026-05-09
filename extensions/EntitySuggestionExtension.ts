@@ -42,13 +42,20 @@ export const EntitySuggestionExtension = Extension.create<Options>({
       new Plugin({
         key: pluginKey,
         view() {
+          let prevQuery = "";
+          let prevActive = false;
+          let prevFrom = 0;
+
           return {
             update(view) {
               const { state } = view;
               const { selection } = state;
 
               if (selection.from !== selection.to) {
-                onStateChange({ active: false, matches: [], query: "", from: 0, to: 0, coords: null });
+                if (prevActive) {
+                  prevActive = false; prevQuery = ""; prevFrom = 0;
+                  onStateChange({ active: false, matches: [], query: "", from: 0, to: 0, coords: null });
+                }
                 return;
               }
 
@@ -58,7 +65,10 @@ export const EntitySuggestionExtension = Extension.create<Options>({
               const match = textBefore.match(/[\w''.-]+$/);
 
               if (!match || match[0].length < 2) {
-                onStateChange({ active: false, matches: [], query: "", from: 0, to: 0, coords: null });
+                if (prevActive || prevQuery !== "") {
+                  prevActive = false; prevQuery = ""; prevFrom = 0;
+                  onStateChange({ active: false, matches: [], query: "", from: 0, to: 0, coords: null });
+                }
                 return;
               }
 
@@ -67,10 +77,16 @@ export const EntitySuggestionExtension = Extension.create<Options>({
               const matches = matchEntities(query, entities);
 
               if (matches.length === 0) {
-                onStateChange({ active: false, matches: [], query: "", from: 0, to: 0, coords: null });
+                if (prevActive || prevQuery !== query) {
+                  prevActive = false; prevQuery = query; prevFrom = from;
+                  onStateChange({ active: false, matches: [], query: "", from: 0, to: 0, coords: null });
+                }
                 return;
               }
 
+              if (prevActive && prevQuery === query && prevFrom === from) return;
+
+              prevActive = true; prevQuery = query; prevFrom = from;
               const coords = view.coordsAtPos(from);
               onStateChange({
                 active: true,

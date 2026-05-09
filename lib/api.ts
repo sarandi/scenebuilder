@@ -14,37 +14,68 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   return res.json();
 }
 
-/*export async function login(email: string, password: string) {
-  return request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
-}*/
-
-/*export async function register(email: string, displayName: string, password: string) {
-  return request("/api/auth/register", { method: "POST", body: JSON.stringify({ email, displayName, password }) });
-}*/
-
-export async function getScenes(token: string) {
-  return request<SceneSummary[]>("/api/scenes", {}, token);
+// Stories
+export async function getStories(token: string) {
+  return request<Story[]>("/api/stories", {}, token);
 }
 
-export async function getScene(token: string, id: number) {
-  return request<SceneFull>(`/api/scenes/${id}`, {}, token);
+export async function getStory(token: string, id: number) {
+  return request<Story>(`/api/stories/${id}`, {}, token);
 }
 
-export async function saveScene(token: string, title: string, content: string) {
-  return request<SceneFull>("/api/scenes", { method: "POST", body: JSON.stringify({ title, content }) }, token);
+export async function createStory(token: string, title: string) {
+  return request<Story>("/api/stories", { method: "POST", body: JSON.stringify({ title }) }, token);
 }
 
-export async function updateScene(token: string, id: number, title: string, content: string) {
-  return request<SceneFull>(`/api/scenes/${id}`, { method: "PUT", body: JSON.stringify({ title, content }) }, token);
+export async function updateStory(token: string, id: number, title: string) {
+  return request<Story>(`/api/stories/${id}`, { method: "PUT", body: JSON.stringify({ title }) }, token);
 }
 
-export async function deleteScene(token: string, id: number) {
-  return request<void>(`/api/scenes/${id}`, { method: "DELETE" }, token);
+export async function deleteStory(token: string, id: number) {
+  return request<void>(`/api/stories/${id}`, { method: "DELETE" }, token);
 }
 
-export async function reorderScenes(token: string, orderedIds: number[]) {
-  return request<void>("/api/scenes/reorder", { method: "PUT", body: JSON.stringify({ orderedIds }) }, token);
+// Scenes
+export async function getScenes(token: string, storyId: number) {
+  return request<SceneSummary[]>(`/api/stories/${storyId}/scenes`, {}, token);
 }
+
+export async function getScene(token: string, storyId: number, id: number) {
+  return request<SceneFull>(`/api/stories/${storyId}/scenes/${id}`, {}, token);
+}
+
+export async function saveScene(token: string, storyId: number, title: string, content: string) {
+  return request<SceneFull>(`/api/stories/${storyId}/scenes`, { method: "POST", body: JSON.stringify({ title, content }) }, token);
+}
+
+export async function updateScene(token: string, storyId: number, id: number, title: string, content: string) {
+  return request<SceneFull>(`/api/stories/${storyId}/scenes/${id}`, { method: "PUT", body: JSON.stringify({ title, content }) }, token);
+}
+
+export async function deleteScene(token: string, storyId: number, id: number) {
+  return request<void>(`/api/stories/${storyId}/scenes/${id}`, { method: "DELETE" }, token);
+}
+
+export async function reorderScenes(token: string, storyId: number, orderedIds: number[]) {
+  return request<void>(`/api/stories/${storyId}/scenes/reorder`, { method: "PUT", body: JSON.stringify({ orderedIds }) }, token);
+}
+
+// Admin
+export async function getAdminUsers(token: string) {
+  return request<AdminUser[]>("/api/admin/users", {}, token);
+}
+
+export async function updateUserRole(token: string, userId: string, role: string) {
+  return request<void>(`/api/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ role }) }, token);
+}
+
+export type Story = {
+  id: number;
+  title: string;
+  sceneCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type SceneSummary = {
   id: number;
@@ -56,4 +87,13 @@ export type SceneSummary = {
 
 export type SceneFull = SceneSummary & {
   content: string;
+};
+
+export type AdminUser = {
+  id: string;
+  email: string;
+  displayName: string;
+  role: string | null;
+  sceneCount: number;
+  createdAt: string;
 };

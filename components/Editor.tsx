@@ -98,8 +98,9 @@ export function Editor({ onWordCountChange, onEntitiesChange, onContentChange, o
       } else {
         editor.commands.clearContent();
       }
+      onEntitiesChange(getLinkedEntities(editor));
     };
-  }, [editor, onResetRef]);
+  }, [editor, onResetRef, onEntitiesChange]);
 
   // Hover detection on entity spans
   useEffect(() => {

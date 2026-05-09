@@ -1,348 +1,147 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
-import { saveScene, updateScene, getScenes, getScene, deleteScene, reorderScenes } from "@/lib/api";
-import type { SceneSummary } from "@/lib/api";
-import { useAuth, useClerk } from "@clerk/nextjs";
-import { mockEntities, entityColors, entityIcons, type EntityType } from "@/lib/mockData";
-import { Editor } from "@/components/Editor";
-import { Manifest } from "@/components/Manifest";
-import type { Entity } from "@/lib/mockData";
+import { useAuth, useClerk, useUser } from "@clerk/nextjs";
+import { useEffect, useState } from "react";
+import { getStories, createStory, updateStory, deleteStory, type Story } from "@/lib/api";
 
-const SWIPE_THRESHOLD = 50;
-type PanelMode = "manifest" | "both" | "sidebar" | "none";
-
-export default function Home() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
+export default function StoriesPage() {
+  const { getToken } = useAuth();
   const { signOut } = useClerk();
+  const { user } = useUser();
+  const isAdmin = user?.publicMetadata?.role === "admin";
 
-  const [panelMode, setPanelMode] = useState<PanelMode>("manifest");
-  const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState<EntityType | "all">("all");
-  const [wordCount, setWordCount] = useState(0);
-  const [linkedEntities, setLinkedEntities] = useState<Entity[]>([]);
-  const [scenes, setScenes] = useState<SceneSummary[]>([]);
-  const [sceneId, setSceneId] = useState<number | null>(null);
-  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "idle">("idle");
-  const [sceneTitle, setSceneTitle] = useState("");
-  const sceneContentRef = useRef("");
-  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const editorResetRef = useRef<((content: string) => void) | null>(null);
-  const touchStartX = useRef<number | null>(null);
-  const touchStartY = useRef<number | null>(null);
-
-  const manifestOpen = panelMode === "manifest" || panelMode === "both";
-  const sidebarOpen = panelMode === "sidebar" || panelMode === "both";
-
-  const cyclePanel = () => {
-    setPanelMode(m =>
-      m === "manifest" ? "both" :
-      m === "both" ? "sidebar" :
-      m === "sidebar" ? "none" : "manifest"
-    );
-  };
-
-  const panelIcon =
-    panelMode === "manifest" ? "☰" :
-    panelMode === "both" ? "☰⊞" :
-    panelMode === "sidebar" ? "⊞" : "⊟";
+  const [stories, setStories] = useState<Story[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newTitle, setNewTitle] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
 
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      loadScenes();
-    }
-  }, [isLoaded, isSignedIn]);
-
-  const loadScenes = async () => {
-    const token = await getToken();
-    if (!token) return;
-    try {
-      const data = await getScenes(token);
-      setScenes(data);
-    } catch {
-      console.error("Failed to load scenes");
-    }
-  };
-
-  const handleSave = useCallback(async (title: string, content: string, id: number | null = sceneId): Promise<number | null> => {
-    const token = await getToken();
-    if (!token || !title.trim()) return id;
-
-    setSaveStatus("saving");
-    try {
-      if (id) {
-        await updateScene(token, id, title, content);
-        setSaveStatus("saved");
-        setScenes(prev => prev.map(s => s.id === id ? { ...s, title, updatedAt: new Date().toISOString() } : s));
-        return id;
-      } else {
-        const result = await saveScene(token, title, content);
-        setSceneId(result.id);
-        setSaveStatus("saved");
-        setScenes(prev => [...prev, { id: result.id, title, displayOrder: result.displayOrder, createdAt: result.createdAt, updatedAt: result.updatedAt }]);
-        return result.id;
+    (async () => {
+      const token = await getToken({ skipCache: true });
+      if (!token) return;
+      try {
+        setStories(await getStories(token));
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      setSaveStatus("unsaved");
-      return id;
-    }
-  }, [sceneId, getToken]);
+    })();
+  }, [getToken]);
 
-  const triggerAutoSave = useCallback((title: string, content: string) => {
-    setSaveStatus("unsaved");
-    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
-    autoSaveTimer.current = setTimeout(() => {
-      handleSave(title, content);
-    }, 2000);
-  }, [handleSave]);
-
-  const handleSceneSelect = async (scene: SceneSummary) => {
-    if (autoSaveTimer.current) {
-      clearTimeout(autoSaveTimer.current);
-      autoSaveTimer.current = null;
-    }
-    await handleSave(sceneTitle, sceneContentRef.current);
+  const handleCreate = async () => {
+    if (!newTitle.trim()) return;
     const token = await getToken();
     if (!token) return;
+    setCreating(true);
     try {
-      const full = await getScene(token, scene.id);
-      setSceneId(full.id);
-      setSceneTitle(full.title);
-      sceneContentRef.current = full.content;
-      editorResetRef.current?.(full.content);
-      setSaveStatus("saved");
-    } catch {
-      console.error("Failed to load scene");
+      const story = await createStory(token, newTitle.trim());
+      setStories(prev => [story, ...prev]);
+      setNewTitle("");
+    } finally {
+      setCreating(false);
     }
   };
 
-  const handleSceneCreate = async () => {
-    if (autoSaveTimer.current) {
-      clearTimeout(autoSaveTimer.current);
-      autoSaveTimer.current = null;
-    }
-    await handleSave(sceneTitle, sceneContentRef.current);
-    setSceneId(null);
-    setSceneTitle("");
-    sceneContentRef.current = "";
-    editorResetRef.current?.("");
-    setSaveStatus("idle");
-  };
-
-  const handleSceneDelete = async (id: number) => {
+  const handleRename = async (id: number) => {
+    if (!renameTitle.trim()) return;
     const token = await getToken();
     if (!token) return;
-    try {
-      await deleteScene(token, id);
-      setScenes(prev => prev.filter(s => s.id !== id));
-      if (sceneId === id) {
-        setSceneId(null);
-        setSceneTitle("");
-        sceneContentRef.current = "";
-        editorResetRef.current?.("");
-        setSaveStatus("idle");
-      }
-    } catch {
-      console.error("Failed to delete scene");
-    }
+    await updateStory(token, id, renameTitle.trim());
+    setStories(prev => prev.map(s => s.id === id ? { ...s, title: renameTitle.trim() } : s));
+    setRenamingId(null);
   };
 
-  const handleSceneRename = async (id: number, title: string) => {
+  const handleDelete = async (id: number) => {
+    if (!confirm("Delete this story and all its scenes?")) return;
     const token = await getToken();
     if (!token) return;
-    try {
-      const content = id === sceneId ? sceneContentRef.current : "";
-      await updateScene(token, id, title, content);
-      setScenes(prev => prev.map(s => s.id === id ? { ...s, title } : s));
-      if (id === sceneId) setSceneTitle(title);
-    } catch {
-      console.error("Failed to rename scene");
-    }
+    await deleteStory(token, id);
+    setStories(prev => prev.filter(s => s.id !== id));
   };
-
-  const handleScenesReorder = async (orderedIds: number[]) => {
-    const token = await getToken();
-    if (!token) return;
-    setScenes(prev => {
-      const map = new Map(prev.map(s => [s.id, s]));
-      return orderedIds.map((id, i) => ({ ...map.get(id)!, displayOrder: i }));
-    });
-    try {
-      await reorderScenes(token, orderedIds);
-    } catch {
-      console.error("Failed to reorder scenes");
-    }
-  };
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-  }, []);
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return;
-    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-    const deltaY = e.changedTouches[0].clientY - touchStartY.current;
-    if (Math.abs(deltaY) > Math.abs(deltaX)) return;
-    if (Math.abs(deltaX) < SWIPE_THRESHOLD) return;
-    if (deltaX > 0) {
-      setPanelMode(m => m === "sidebar" ? "none" : "manifest");
-    } else {
-      setPanelMode(m => m === "manifest" ? "none" : "sidebar");
-    }
-    touchStartX.current = null;
-    touchStartY.current = null;
-  }, []);
-
-  const filtered = mockEntities.filter(e => {
-    const matchesSearch = e.name.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = activeFilter === "all" || e.type === activeFilter;
-    return matchesSearch && matchesFilter;
-  });
-
-  const entityTypes: (EntityType | "all")[] = ["all", "character", "location", "item", "faction", "event"];
-
-  if (!isLoaded || !isSignedIn) return null;
 
   return (
-    <div
-      className="main-layout"
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-    >
-      {(manifestOpen || sidebarOpen) && (
-        <div
-          className="lg-hidden"
-          onClick={() => setPanelMode("none")}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 15 }}
-        />
-      )}
+    <div style={{ minHeight: "100dvh", background: "var(--bg)", color: "var(--fg)", fontFamily: "Georgia, serif" }}>
+      <div style={{ maxWidth: "680px", margin: "0 auto", padding: "48px 24px" }}>
 
-      {/* Left — Manifest */}
-      <div className={`drawer drawer-left ${manifestOpen ? "open" : "closed"}`}>
-        <Manifest
-          entities={linkedEntities}
-          onClose={() => setPanelMode("none")}
-          scenes={scenes}
-          currentSceneId={sceneId}
-          onSceneSelect={handleSceneSelect}
-          onSceneCreate={handleSceneCreate}
-          onSceneDelete={handleSceneDelete}
-          onSceneRename={handleSceneRename}
-          onScenesReorder={handleScenesReorder}
-        />
-      </div>
-
-      {/* Center — Editor */}
-      <div className="editor-column">
-        <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "10px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
-          <button
-            onClick={cyclePanel}
-            style={{ background: "none", border: "none", color: panelMode !== "none" ? "var(--accent)" : "var(--fg-muted)", cursor: "pointer", fontSize: "18px", lineHeight: 1, flexShrink: 0 }}
-          >
-            {panelIcon}
-          </button>
-          <input
-            placeholder="Scene title..."
-            value={sceneTitle}
-            onChange={e => {
-              setSceneTitle(e.target.value);
-              triggerAutoSave(e.target.value, sceneContentRef.current);
-            }}
-            style={{ flex: 1, background: "none", border: "none", outline: "none", color: "var(--fg)", fontSize: "17px", fontFamily: "Georgia, serif", minWidth: 0 }}
-          />
-          <span style={{ fontSize: "11px", color: "var(--fg-muted)", fontFamily: "monospace", flexShrink: 0 }}>{wordCount}w</span>
-          <span style={{
-            fontSize: "11px",
-            color: saveStatus === "saved" ? "var(--green)" : saveStatus === "saving" ? "var(--accent)" : saveStatus === "unsaved" ? "var(--red)" : "var(--fg-muted)",
-            fontFamily: "monospace",
-            flexShrink: 0
-          }}>
-            {saveStatus === "saved" ? "saved" : saveStatus === "saving" ? "saving..." : saveStatus === "unsaved" ? "unsaved" : ""}
-          </span>
-          <button
-            onClick={() => handleSave(sceneTitle, sceneContentRef.current)}
-            style={{ background: "none", border: "1px solid var(--border)", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace", flexShrink: 0, padding: "3px 8px", borderRadius: "4px" }}
-          >
-            save
-          </button>
-          <button
-            onClick={() => signOut(() => window.location.href = "/sign-in")}
-            style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "12px", fontFamily: "monospace", flexShrink: 0 }}
-          >
-            signout
-          </button>
-        </div>
-
-        <div style={{ flex: 1, overflow: "auto", padding: "32px 24px" }}>
-          <div style={{ maxWidth: "680px", margin: "0 auto", minHeight: "100%" }}>
-            <Editor
-              onWordCountChange={setWordCount}
-              onEntitiesChange={setLinkedEntities}
-              onContentChange={(content) => {
-                sceneContentRef.current = content;
-                triggerAutoSave(sceneTitle, content);
-              }}
-              onResetRef={editorResetRef}
-            />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "48px" }}>
+          <span style={{ fontSize: "13px", letterSpacing: "0.12em", color: "var(--fg-muted)", fontFamily: "monospace" }}>SCENE BUILDER</span>
+          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+            {isAdmin && (
+              <a href="/admin" style={{ fontSize: "12px", color: "var(--fg-muted)", fontFamily: "monospace", textDecoration: "none" }}>admin</a>
+            )}
+            <button
+              onClick={() => signOut(() => window.location.href = "/sign-in")}
+              style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "12px", fontFamily: "monospace" }}
+            >
+              signout
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* Right — Entity Sidebar */}
-      <div className={`drawer drawer-right ${sidebarOpen ? "open" : "closed"}`}>
-        <div style={{ padding: "16px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: "11px", letterSpacing: "0.12em", color: "var(--fg-muted)", fontFamily: "monospace" }}>ENTITIES</span>
-          <button onClick={() => setPanelMode("none")} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "18px", lineHeight: 1 }}>✕</button>
-        </div>
-        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", gap: "8px", marginBottom: "40px" }}>
           <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search entities..."
-            style={{ width: "100%", background: "var(--surface-2)", border: "1px solid var(--border)", outline: "none", color: "var(--fg)", padding: "8px 12px", fontSize: "13px", borderRadius: "4px", fontFamily: "Georgia, serif" }}
+            value={newTitle}
+            onChange={e => setNewTitle(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleCreate()}
+            placeholder="New story title..."
+            style={{ flex: 1, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--fg)", padding: "10px 14px", fontSize: "15px", fontFamily: "Georgia, serif", borderRadius: "4px", outline: "none" }}
           />
+          <button
+            onClick={handleCreate}
+            disabled={creating || !newTitle.trim()}
+            style={{ background: "var(--accent-dim)", border: "1px solid var(--accent)", color: "var(--accent)", padding: "10px 16px", fontSize: "12px", fontFamily: "monospace", borderRadius: "4px", cursor: "pointer", opacity: creating ? 0.5 : 1 }}
+          >
+            create
+          </button>
         </div>
-        <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", gap: "6px", flexWrap: "wrap" }}>
-          {entityTypes.map(type => (
-            <button
-              key={type}
-              onClick={() => setActiveFilter(type)}
-              style={{
-                background: activeFilter === type ? "var(--accent-dim)" : "var(--surface-2)",
-                border: `1px solid ${activeFilter === type ? "var(--accent)" : "var(--border)"}`,
-                color: activeFilter === type ? "var(--accent)" : "var(--fg-muted)",
-                padding: "3px 10px", borderRadius: "20px",
-                fontSize: "11px", cursor: "pointer", fontFamily: "monospace", letterSpacing: "0.06em",
-              }}
-            >
-              {type}
-            </button>
-          ))}
-        </div>
-        <div style={{ flex: 1, overflow: "auto" }}>
-          {filtered.map(entity => (
-            <div
-              key={entity.id}
-              style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", cursor: "pointer" }}
-              onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                <span style={{ color: entityColors[entity.type], fontSize: "12px" }}>{entityIcons[entity.type]}</span>
-                <span style={{ color: "var(--fg)", fontSize: "14px" }}>{entity.name}</span>
-              </div>
-              <p style={{ color: "var(--fg-muted)", fontSize: "12px", lineHeight: 1.5, paddingLeft: "20px" }}>
-                {entity.description.length > 80 ? entity.description.slice(0, 80) + "..." : entity.description}
-              </p>
-            </div>
-          ))}
-          {filtered.length === 0 && (
-            <p style={{ padding: "16px", color: "var(--fg-muted)", fontSize: "13px", fontStyle: "italic" }}>No entities match.</p>
-          )}
-        </div>
-      </div>
 
+        {loading ? (
+          <p style={{ color: "var(--fg-muted)", fontSize: "13px", fontFamily: "monospace" }}>loading...</p>
+        ) : stories.length === 0 ? (
+          <p style={{ color: "var(--fg-muted)", fontSize: "15px", fontStyle: "italic" }}>No stories yet. Create one above.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+            {stories.map(story => (
+              <div key={story.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "14px 0", borderBottom: "1px solid var(--border)" }}>
+                {renamingId === story.id ? (
+                  <input
+                    autoFocus
+                    value={renameTitle}
+                    onChange={e => setRenameTitle(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") handleRename(story.id); if (e.key === "Escape") setRenamingId(null); }}
+                    onBlur={() => handleRename(story.id)}
+                    style={{ flex: 1, background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--fg)", padding: "4px 8px", fontSize: "15px", fontFamily: "Georgia, serif", borderRadius: "4px", outline: "none" }}
+                  />
+                ) : (
+                  <a
+                    href={`/stories/${story.id}`}
+                    style={{ flex: 1, color: "var(--fg)", textDecoration: "none", fontSize: "17px" }}
+                  >
+                    {story.title}
+                  </a>
+                )}
+                <span style={{ fontSize: "11px", color: "var(--fg-muted)", fontFamily: "monospace", flexShrink: 0 }}>
+                  {story.sceneCount} {story.sceneCount === 1 ? "scene" : "scenes"}
+                </span>
+                <button
+                  onClick={() => { setRenamingId(story.id); setRenameTitle(story.title); }}
+                  style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}
+                >
+                  rename
+                </button>
+                <button
+                  onClick={() => handleDelete(story.id)}
+                  style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}
+                >
+                  delete
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
