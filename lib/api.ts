@@ -14,13 +14,13 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   return res.json();
 }
 
-export async function login(email: string, password: string) {
+/*export async function login(email: string, password: string) {
   return request("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) });
-}
+}*/
 
-export async function register(email: string, displayName: string, password: string) {
+/*export async function register(email: string, displayName: string, password: string) {
   return request("/api/auth/register", { method: "POST", body: JSON.stringify({ email, displayName, password }) });
-}
+}*/
 
 export async function getScenes(token: string) {
   return request<SceneSummary[]>("/api/scenes", {}, token);

@@ -3,8 +3,7 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { saveScene, updateScene, getScenes, getScene, deleteScene, reorderScenes } from "@/lib/api";
 import type { SceneSummary } from "@/lib/api";
-import { useRouter } from "next/navigation";
-import { isAuthenticated, getToken, clearAuth } from "@/lib/auth";
+import { useAuth, useClerk } from "@clerk/nextjs";
 import { mockEntities, entityColors, entityIcons, type EntityType } from "@/lib/mockData";
 import { Editor } from "@/components/Editor";
 import { Manifest } from "@/components/Manifest";
@@ -14,8 +13,9 @@ const SWIPE_THRESHOLD = 50;
 type PanelMode = "manifest" | "both" | "sidebar" | "none";
 
 export default function Home() {
-  const router = useRouter();
-  const [authChecked, setAuthChecked] = useState(false);
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { signOut } = useClerk();
+
   const [panelMode, setPanelMode] = useState<PanelMode>("manifest");
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState<EntityType | "all">("all");
@@ -48,16 +48,13 @@ export default function Home() {
     panelMode === "sidebar" ? "⊞" : "⊟";
 
   useEffect(() => {
-    if (!isAuthenticated()) {
-      router.push("/login");
-    } else {
-      setAuthChecked(true);
+    if (isLoaded && isSignedIn) {
       loadScenes();
     }
-  }, [router]);
+  }, [isLoaded, isSignedIn]);
 
   const loadScenes = async () => {
-    const token = getToken();
+    const token = await getToken();
     if (!token) return;
     try {
       const data = await getScenes(token);
@@ -68,7 +65,7 @@ export default function Home() {
   };
 
   const handleSave = useCallback(async (title: string, content: string, id: number | null = sceneId): Promise<number | null> => {
-    const token = getToken();
+    const token = await getToken();
     if (!token || !title.trim()) return id;
 
     setSaveStatus("saving");
@@ -89,7 +86,7 @@ export default function Home() {
       setSaveStatus("unsaved");
       return id;
     }
-  }, [sceneId]);
+  }, [sceneId, getToken]);
 
   const triggerAutoSave = useCallback((title: string, content: string) => {
     setSaveStatus("unsaved");
@@ -105,7 +102,7 @@ export default function Home() {
       autoSaveTimer.current = null;
     }
     await handleSave(sceneTitle, sceneContentRef.current);
-    const token = getToken();
+    const token = await getToken();
     if (!token) return;
     try {
       const full = await getScene(token, scene.id);
@@ -133,7 +130,7 @@ export default function Home() {
   };
 
   const handleSceneDelete = async (id: number) => {
-    const token = getToken();
+    const token = await getToken();
     if (!token) return;
     try {
       await deleteScene(token, id);
@@ -151,7 +148,7 @@ export default function Home() {
   };
 
   const handleSceneRename = async (id: number, title: string) => {
-    const token = getToken();
+    const token = await getToken();
     if (!token) return;
     try {
       const content = id === sceneId ? sceneContentRef.current : "";
@@ -164,7 +161,7 @@ export default function Home() {
   };
 
   const handleScenesReorder = async (orderedIds: number[]) => {
-    const token = getToken();
+    const token = await getToken();
     if (!token) return;
     setScenes(prev => {
       const map = new Map(prev.map(s => [s.id, s]));
@@ -205,7 +202,7 @@ export default function Home() {
 
   const entityTypes: (EntityType | "all")[] = ["all", "character", "location", "item", "faction", "event"];
 
-  if (!authChecked) return null;
+  if (!isLoaded || !isSignedIn) return null;
 
   return (
     <div
@@ -270,7 +267,7 @@ export default function Home() {
             save
           </button>
           <button
-            onClick={() => { clearAuth(); window.location.href = "/login"; }}
+            onClick={() => signOut(() => window.location.href = "/sign-in")}
             style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "12px", fontFamily: "monospace", flexShrink: 0 }}
           >
             signout
