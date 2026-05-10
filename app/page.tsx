@@ -1,15 +1,16 @@
 "use client";
 
 import { useAuth, useClerk, useUser } from "@clerk/nextjs";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   getStories, createStory, updateStory, deleteStory, type Story,
   getUniverses, createUniverse, updateUniverse, deleteUniverse, type Universe,
-  getEntityTypes, getEntities, createEntity, deleteEntity, type EntityType, type EntitySummary,
+  getEntityTypes, getEntities, type EntityType,
 } from "@/lib/api";
 
 type Tab = "social" | "worlds" | "others" | "settings";
-type SidebarItem = "stories" | "universes" | number; // number = entityTypeId
+type SidebarItem = "stories" | "universes";
 
 export default function Dashboard() {
   const { getToken } = useAuth();
@@ -20,29 +21,23 @@ export default function Dashboard() {
   const [tab, setTab] = useState<Tab>("worlds");
   const [sidebarItem, setSidebarItem] = useState<SidebarItem>("stories");
 
-  // Stories
   const [stories, setStories] = useState<Story[]>([]);
   const [newStoryTitle, setNewStoryTitle] = useState("");
   const [renamingStoryId, setRenamingStoryId] = useState<number | null>(null);
   const [renameStoryTitle, setRenameStoryTitle] = useState("");
+  const [openPoolStoryId, setOpenPoolStoryId] = useState<number | null>(null);
 
-  // Universes
   const [universes, setUniverses] = useState<Universe[]>([]);
   const [newUniverseName, setNewUniverseName] = useState("");
   const [renamingUniverseId, setRenamingUniverseId] = useState<number | null>(null);
   const [renameUniverseName, setRenameUniverseName] = useState("");
 
-  // Entities
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
-  const [entities, setEntities] = useState<EntitySummary[]>([]);
-  const [newEntityName, setNewEntityName] = useState("");
-  const [loadingEntities, setLoadingEntities] = useState(false);
-
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
-      const token = await getToken({ skipCache: true });
+      const token = await getToken();
       if (!token) return;
       try {
         const [s, u, et] = await Promise.all([
@@ -53,28 +48,19 @@ export default function Dashboard() {
         setStories(s);
         setUniverses(u);
         setEntityTypes(et);
+        localStorage.setItem("entityTypes", JSON.stringify(et));
+        et.forEach(async (type) => {
+          try {
+            const entities = await getEntities(token, { entityTypeId: type.id });
+            localStorage.setItem(`entities_${type.id}`, JSON.stringify(entities));
+          } catch {}
+        });
       } finally {
         setLoading(false);
       }
     })();
   }, [getToken]);
 
-  // Load entities when switching to an entity type
-  useEffect(() => {
-    if (typeof sidebarItem !== "number") return;
-    (async () => {
-      setLoadingEntities(true);
-      const token = await getToken();
-      if (!token) return;
-      try {
-        setEntities(await getEntities(token, { entityTypeId: sidebarItem }));
-      } finally {
-        setLoadingEntities(false);
-      }
-    })();
-  }, [sidebarItem, getToken]);
-
-  // Stories handlers
   const handleCreateStory = async () => {
     if (!newStoryTitle.trim()) return;
     const token = await getToken();
@@ -84,11 +70,23 @@ export default function Dashboard() {
     setNewStoryTitle("");
   };
 
+  const handleStoryUniverseToggle = async (storyId: number, currentIds: number[], uid: number) => {
+    const next = currentIds.includes(uid) ? currentIds.filter(id => id !== uid) : [...currentIds, uid];
+    setStories(prev => prev.map(s => s.id === storyId ? {
+      ...s, universeIds: next, universeNames: universes.filter(u => next.includes(u.id)).map(u => u.name),
+    } : s));
+    const token = await getToken();
+    if (!token) return;
+    const story = stories.find(s => s.id === storyId);
+    await updateStory(token, storyId, story?.title ?? "", next);
+  };
+
   const handleRenameStory = async (id: number) => {
     if (!renameStoryTitle.trim()) return;
     const token = await getToken();
     if (!token) return;
-    await updateStory(token, id, renameStoryTitle.trim());
+    const existing = stories.find(s => s.id === id);
+    await updateStory(token, id, renameStoryTitle.trim(), existing?.universeIds ?? []);
     setStories(prev => prev.map(s => s.id === id ? { ...s, title: renameStoryTitle.trim() } : s));
     setRenamingStoryId(null);
   };
@@ -101,7 +99,6 @@ export default function Dashboard() {
     setStories(prev => prev.filter(s => s.id !== id));
   };
 
-  // Universe handlers
   const handleCreateUniverse = async () => {
     if (!newUniverseName.trim()) return;
     const token = await getToken();
@@ -128,35 +125,6 @@ export default function Dashboard() {
     setUniverses(prev => prev.filter(u => u.id !== id));
   };
 
-  // Entity handlers
-  const handleCreateEntity = async () => {
-    if (!newEntityName.trim() || typeof sidebarItem !== "number") return;
-    const token = await getToken();
-    if (!token) return;
-    const entity = await createEntity(token, {
-      name: newEntityName.trim(),
-      entityTypeId: sidebarItem,
-      isPublic: true,
-      isSecret: false,
-      fieldValues: [],
-      fieldRefValues: [],
-    });
-    setEntities(prev => [entity, ...prev]);
-    setNewEntityName("");
-  };
-
-  const handleDeleteEntity = async (id: number) => {
-    if (!confirm("Delete this entity?")) return;
-    const token = await getToken();
-    if (!token) return;
-    await deleteEntity(token, id);
-    setEntities(prev => prev.filter(e => e.id !== id));
-  };
-
-  const activeEntityType = typeof sidebarItem === "number"
-    ? entityTypes.find(t => t.id === sidebarItem)
-    : null;
-
   const tabs: { key: Tab; label: string }[] = [
     { key: "social", label: "Social" },
     { key: "worlds", label: "My Worlds" },
@@ -171,9 +139,6 @@ export default function Dashboard() {
       <div style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
         <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "32px" }}>
-            <span style={{ fontSize: "12px", letterSpacing: "0.12em", color: "var(--fg-muted)", fontFamily: "monospace", padding: "16px 0" }}>
-              SCENE BUILDER
-            </span>
             <div style={{ display: "flex" }}>
               {tabs.map(t => (
                 <button
@@ -194,10 +159,10 @@ export default function Dashboard() {
           </div>
           <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
             {isAdmin && (
-              <a href="/admin" style={{ fontSize: "12px", color: "var(--fg-muted)", fontFamily: "monospace", textDecoration: "none" }}>admin</a>
+              <Link href="/admin" style={{ fontSize: "12px", color: "var(--fg-muted)", fontFamily: "monospace", textDecoration: "none" }}>admin</Link>
             )}
             <button
-              onClick={() => signOut(() => window.location.href = "/sign-in")}
+              onClick={() => signOut(() => { window.location.href = "/sign-in"; })}
               style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "12px", fontFamily: "monospace" }}
             >
               signout
@@ -209,28 +174,24 @@ export default function Dashboard() {
       {/* Body */}
       <div style={{ flex: 1, maxWidth: "1200px", margin: "0 auto", width: "100%", padding: "0 24px", display: "flex" }}>
 
-        {/* Social */}
         {tab === "social" && (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <p style={{ color: "var(--fg-muted)", fontSize: "13px", fontFamily: "monospace", fontStyle: "italic" }}>Social — coming soon</p>
           </div>
         )}
 
-        {/* Others' */}
         {tab === "others" && (
           <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
             <p style={{ color: "var(--fg-muted)", fontSize: "13px", fontFamily: "monospace", fontStyle: "italic" }}>Others' worlds — coming soon</p>
           </div>
         )}
 
-        {/* Settings */}
         {tab === "settings" && (
           <div style={{ flex: 1, padding: "48px 0" }}>
             <p style={{ color: "var(--fg-muted)", fontSize: "13px", fontFamily: "monospace" }}>account / settings — coming soon</p>
           </div>
         )}
 
-        {/* My Worlds */}
         {tab === "worlds" && (
           <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
 
@@ -241,7 +202,7 @@ export default function Dashboard() {
                   key={item}
                   onClick={() => setSidebarItem(item)}
                   style={{
-                    width: "100%", textAlign: "left", background: "none", border: "none",
+                    width: "100%", textAlign: "left", border: "none",
                     padding: "8px 16px", cursor: "pointer", fontSize: "12px",
                     fontFamily: "monospace", letterSpacing: "0.08em",
                     color: sidebarItem === item ? "var(--accent)" : "var(--fg-muted)",
@@ -259,22 +220,23 @@ export default function Dashboard() {
                     ENTITIES
                   </div>
                   {entityTypes.map(et => (
-                    <button
+                    <a
                       key={et.id}
-                      onClick={() => setSidebarItem(et.id)}
+                      href={`/entities/type/${et.name.toLowerCase()}`}
                       style={{
-                        width: "100%", textAlign: "left", background: "none", border: "none",
-                        padding: "8px 16px", cursor: "pointer", fontSize: "12px",
-                        fontFamily: "monospace", letterSpacing: "0.08em",
-                        color: sidebarItem === et.id ? "var(--accent)" : "var(--fg-muted)",
-                        background: sidebarItem === et.id ? "var(--surface-2)" : "none",
-                        borderLeft: sidebarItem === et.id ? "2px solid var(--accent)" : "2px solid transparent",
                         display: "flex", alignItems: "center", gap: "8px",
+                        width: "100%", padding: "8px 16px", fontSize: "12px",
+                        fontFamily: "monospace", letterSpacing: "0.08em",
+                        color: "var(--fg-muted)", textDecoration: "none",
+                        borderLeft: "2px solid transparent",
+                        boxSizing: "border-box",
                       }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "var(--surface-2)"; e.currentTarget.style.color = "var(--fg)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "var(--fg-muted)"; }}
                     >
                       <span style={{ color: et.color ?? "var(--fg-muted)" }}>{et.icon}</span>
                       {et.name.toUpperCase()}
-                    </button>
+                    </a>
                   ))}
                 </>
               )}
@@ -298,7 +260,10 @@ export default function Dashboard() {
                           placeholder="New story title..."
                           style={{ flex: 1, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--fg)", padding: "8px 12px", fontSize: "14px", fontFamily: "Georgia, serif", borderRadius: "4px", outline: "none" }}
                         />
-                        <button onClick={handleCreateStory} style={{ background: "var(--accent-dim)", border: "1px solid var(--accent)", color: "var(--accent)", padding: "8px 14px", fontSize: "12px", fontFamily: "monospace", borderRadius: "4px", cursor: "pointer" }}>
+                        <button
+                          onClick={handleCreateStory}
+                          disabled={!newStoryTitle.trim()}
+                          style={{ background: "var(--accent-dim)", border: "1px solid var(--accent)", color: "var(--accent)", padding: "8px 14px", fontSize: "12px", fontFamily: "monospace", borderRadius: "4px", cursor: "pointer", opacity: !newStoryTitle.trim() ? 0.4 : 1 }}>
                           create
                         </button>
                       </div>
@@ -312,8 +277,49 @@ export default function Dashboard() {
                               onBlur={() => handleRenameStory(story.id)}
                               style={{ flex: 1, background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--fg)", padding: "4px 8px", fontSize: "15px", fontFamily: "Georgia, serif", borderRadius: "4px", outline: "none" }} />
                           ) : (
-                            <a href={`/stories/${story.id}`} style={{ flex: 1, color: "var(--fg)", textDecoration: "none", fontSize: "16px" }}>{story.title}</a>
+                            <Link href={`/stories/${story.id}`} style={{ flex: 1, color: "var(--fg)", textDecoration: "none", fontSize: "16px" }}>{story.title}</Link>
                           )}
+                          <div
+                            style={{ position: "relative", flexShrink: 0 }}
+                            onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpenPoolStoryId(null); }}
+                            tabIndex={-1}
+                          >
+                            <button
+                              onClick={() => setOpenPoolStoryId(openPoolStoryId === story.id ? null : story.id)}
+                              style={{ background: "none", border: "1px solid var(--border)", color: story.universeIds.length > 0 ? "var(--fg)" : "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", padding: "3px 8px", borderRadius: "4px", cursor: "pointer" }}
+                            >
+                              {story.universeIds.length === 0
+                                ? "universe pool ▾"
+                                : story.universeIds.length === 1
+                                  ? `${story.universeNames[0]} ▾`
+                                  : `${story.universeIds.length} universes ▾`}
+                            </button>
+                            {openPoolStoryId === story.id && (
+                              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "4px", zIndex: 50, minWidth: "160px", padding: "4px 0", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
+                                {universes.length === 0
+                                  ? <span style={{ display: "block", padding: "6px 12px", color: "var(--fg-muted)", fontSize: "12px", fontFamily: "monospace" }}>no universes yet</span>
+                                  : universes.map(u => {
+                                    const active = story.universeIds.includes(u.id);
+                                    return (
+                                      <label
+                                        key={u.id}
+                                        style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontFamily: "monospace", color: "var(--fg)" }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
+                                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={active}
+                                          onChange={() => handleStoryUniverseToggle(story.id, story.universeIds, u.id)}
+                                          style={{ accentColor: "var(--accent)" }}
+                                        />
+                                        {u.name}
+                                      </label>
+                                    );
+                                  })}
+                              </div>
+                            )}
+                          </div>
                           <span style={{ fontSize: "11px", color: "var(--fg-muted)", fontFamily: "monospace" }}>{story.sceneCount}sc</span>
                           <button onClick={() => { setRenamingStoryId(story.id); setRenameStoryTitle(story.title); }} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>rename</button>
                           <button onClick={() => handleDeleteStory(story.id)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>delete</button>
@@ -351,34 +357,6 @@ export default function Dashboard() {
                           )}
                           <button onClick={() => { setRenamingUniverseId(u.id); setRenameUniverseName(u.name); }} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>rename</button>
                           <button onClick={() => handleDeleteUniverse(u.id)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>delete</button>
-                        </div>
-                      ))}
-                    </>
-                  )}
-
-                  {/* Entity list */}
-                  {typeof sidebarItem === "number" && (
-                    <>
-                      <div style={{ display: "flex", gap: "8px", marginBottom: "32px" }}>
-                        <input
-                          value={newEntityName}
-                          onChange={e => setNewEntityName(e.target.value)}
-                          onKeyDown={e => e.key === "Enter" && handleCreateEntity()}
-                          placeholder={`New ${activeEntityType?.name.toLowerCase() ?? "entity"} name...`}
-                          style={{ flex: 1, background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--fg)", padding: "8px 12px", fontSize: "14px", fontFamily: "Georgia, serif", borderRadius: "4px", outline: "none" }}
-                        />
-                        <button onClick={handleCreateEntity} style={{ background: "var(--accent-dim)", border: "1px solid var(--accent)", color: "var(--accent)", padding: "8px 14px", fontSize: "12px", fontFamily: "monospace", borderRadius: "4px", cursor: "pointer" }}>
-                          create
-                        </button>
-                      </div>
-                      {loadingEntities ? (
-                        <p style={{ color: "var(--fg-muted)", fontSize: "13px", fontFamily: "monospace" }}>loading...</p>
-                      ) : entities.length === 0 ? (
-                        <p style={{ color: "var(--fg-muted)", fontSize: "14px", fontStyle: "italic" }}>No {activeEntityType?.name.toLowerCase()}s yet.</p>
-                      ) : entities.map(entity => (
-                        <div key={entity.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
-                          <a href={`/entities/${entity.id}`} style={{ flex: 1, color: "var(--fg)", textDecoration: "none", fontSize: "16px" }}>{entity.name}</a>
-                          <button onClick={() => handleDeleteEntity(entity.id)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>delete</button>
                         </div>
                       ))}
                     </>

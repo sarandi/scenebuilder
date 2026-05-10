@@ -9,6 +9,7 @@ export const EntityMark = Mark.create({
       entityId: { default: null },
       entityType: { default: null },
       entityName: { default: null },
+      entityColor: { default: null },
     };
   },
 
@@ -17,12 +18,14 @@ export const EntityMark = Mark.create({
   },
 
   renderHTML({ HTMLAttributes }) {
+    const color = HTMLAttributes.entityColor ?? "var(--accent)";
     return [
       "span",
       mergeAttributes({
         "data-entity-id": HTMLAttributes.entityId,
         "data-entity-type": HTMLAttributes.entityType,
-        class: `entity-link entity-${HTMLAttributes.entityType}`,
+        class: "entity-link",
+        style: `color: ${color}; border-color: ${color};`,
       }),
       0,
     ];

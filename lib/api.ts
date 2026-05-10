@@ -23,12 +23,12 @@ export async function getStory(token: string, id: number) {
   return request<Story>(`/api/stories/${id}`, {}, token);
 }
 
-export async function createStory(token: string, title: string) {
-  return request<Story>("/api/stories", { method: "POST", body: JSON.stringify({ title }) }, token);
+export async function createStory(token: string, title: string, universeIds: number[] = []) {
+  return request<Story>("/api/stories", { method: "POST", body: JSON.stringify({ title, universeIds }) }, token);
 }
 
-export async function updateStory(token: string, id: number, title: string) {
-  return request<Story>(`/api/stories/${id}`, { method: "PUT", body: JSON.stringify({ title }) }, token);
+export async function updateStory(token: string, id: number, title: string, universeIds: number[] = []) {
+  return request<Story>(`/api/stories/${id}`, { method: "PUT", body: JSON.stringify({ title, universeIds }) }, token);
 }
 
 export async function deleteStory(token: string, id: number) {
@@ -44,12 +44,12 @@ export async function getScene(token: string, storyId: number, id: number) {
   return request<SceneFull>(`/api/stories/${storyId}/scenes/${id}`, {}, token);
 }
 
-export async function saveScene(token: string, storyId: number, title: string, content: string) {
-  return request<SceneFull>(`/api/stories/${storyId}/scenes`, { method: "POST", body: JSON.stringify({ title, content }) }, token);
+export async function saveScene(token: string, storyId: number, title: string, content: string, universeIds: number[] = []) {
+  return request<SceneFull>(`/api/stories/${storyId}/scenes`, { method: "POST", body: JSON.stringify({ title, content, universeIds }) }, token);
 }
 
-export async function updateScene(token: string, storyId: number, id: number, title: string, content: string) {
-  return request<SceneFull>(`/api/stories/${storyId}/scenes/${id}`, { method: "PUT", body: JSON.stringify({ title, content }) }, token);
+export async function updateScene(token: string, storyId: number, id: number, title: string, content: string, universeIds: number[] = []) {
+  return request<SceneFull>(`/api/stories/${storyId}/scenes/${id}`, { method: "PUT", body: JSON.stringify({ title, content, universeIds }) }, token);
 }
 
 export async function deleteScene(token: string, storyId: number, id: number) {
@@ -119,6 +119,8 @@ export async function updateUserRole(token: string, userId: string, role: string
 export type Story = {
   id: number;
   title: string;
+  universeIds: number[];
+  universeNames: string[];
   sceneCount: number;
   createdAt: string;
   updatedAt: string;
@@ -128,6 +130,7 @@ export type SceneSummary = {
   id: number;
   title: string;
   displayOrder: number;
+  universeIds: number[];
   createdAt: string;
   updatedAt: string;
 };
@@ -176,6 +179,7 @@ export type EntitySummary = {
   isPublic: boolean;
   isSecret: boolean;
   updatedAt: string;
+  aliases?: string;
 };
 
 export type EntityRequest = {
@@ -222,3 +226,32 @@ export type AdminUser = {
   sceneCount: number;
   createdAt: string;
 };
+
+export type EditorEntity = {
+  id: string;
+  name: string;
+  typeName: string;
+  typeIcon?: string;
+  typeColor?: string;
+  aliases?: string[];
+};
+
+export function toEditorEntity(s: EntitySummary): EditorEntity {
+  let aliases: string[] | undefined;
+  if (s.aliases) {
+    try {
+      const parsed = JSON.parse(s.aliases);
+      aliases = Array.isArray(parsed) ? parsed : [s.aliases];
+    } catch {
+      aliases = s.aliases.split(",").map(a => a.trim()).filter(Boolean);
+    }
+  }
+  return {
+    id: String(s.id),
+    name: s.name,
+    typeName: s.entityTypeName ?? "Entity",
+    typeIcon: s.entityTypeIcon,
+    typeColor: s.entityTypeColor,
+    aliases,
+  };
+}

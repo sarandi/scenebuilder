@@ -1,10 +1,16 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import type { Entity } from "@/lib/mockData";
+import type { EditorEntity } from "@/lib/api";
+
+export type EntityMatch = {
+  entity: EditorEntity;
+  linkText: string;
+  isAlias: boolean;
+};
 
 export type SuggestionState = {
   active: boolean;
-  matches: Entity[];
+  matches: EntityMatch[];
   query: string;
   from: number;
   to: number;
@@ -12,31 +18,38 @@ export type SuggestionState = {
 };
 
 type Options = {
-  entities: Entity[];
+  getEntities: () => EditorEntity[];
   onStateChange: (state: SuggestionState) => void;
 };
 
 const pluginKey = new PluginKey("entitySuggestion");
 
-function matchEntities(query: string, entities: Entity[]): Entity[] {
+function matchEntities(query: string, entities: EditorEntity[]): EntityMatch[] {
   if (query.length < 2) return [];
   const lower = query.toLowerCase();
-  return entities.filter((e) => {
-    if (e.name.toLowerCase().includes(lower)) return true;
-    if (e.aliases?.some((a) => a.toLowerCase().includes(lower))) return true;
-    return false;
-  });
+  const results: EntityMatch[] = [];
+  for (const entity of entities) {
+    if (entity.name.toLowerCase().includes(lower)) {
+      results.push({ entity, linkText: entity.name, isAlias: false });
+    }
+    for (const alias of entity.aliases ?? []) {
+      if (alias.toLowerCase().includes(lower)) {
+        results.push({ entity, linkText: alias, isAlias: true });
+      }
+    }
+  }
+  return results;
 }
 
 export const EntitySuggestionExtension = Extension.create<Options>({
   name: "entitySuggestion",
 
   addOptions() {
-    return { entities: [], onStateChange: () => {} };
+    return { getEntities: () => [], onStateChange: () => {} };
   },
 
   addProseMirrorPlugins() {
-    const { entities, onStateChange } = this.options;
+    const { getEntities, onStateChange } = this.options;
 
     return [
       new Plugin({
@@ -74,7 +87,9 @@ export const EntitySuggestionExtension = Extension.create<Options>({
 
               const query = match[0];
               const from = pos - query.length;
-              const matches = matchEntities(query, entities);
+              const to = pos;
+
+              const matches = matchEntities(query, getEntities());
 
               if (matches.length === 0) {
                 if (prevActive || prevQuery !== query) {
@@ -93,7 +108,7 @@ export const EntitySuggestionExtension = Extension.create<Options>({
                 matches,
                 query,
                 from,
-                to: pos,
+                to,
                 coords: { top: coords.bottom + 6, left: coords.left },
               });
             },

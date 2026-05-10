@@ -129,10 +129,22 @@ body {
 .entity-link {
   border-bottom: 1px solid;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, background 0.1s;
 }
 
 .entity-link:hover { opacity: 0.75; }
+
+.entity-highlight {
+  background: rgba(196, 154, 60, 0.22);
+  border-radius: 2px;
+  outline: 1px solid rgba(196, 154, 60, 0.5);
+}
+
+.entity-link.entity-highlight,
+.entity-highlight .entity-link,
+.entity-link .entity-highlight {
+  opacity: 1 !important;
+}
 
 .entity-character { border-color: #c49a3c; color: #c49a3c; }
 .entity-location   { border-color: #4a8a6a; color: #4a8a6a; }
