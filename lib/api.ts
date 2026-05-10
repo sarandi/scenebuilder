@@ -60,6 +60,53 @@ export async function reorderScenes(token: string, storyId: number, orderedIds: 
   return request<void>(`/api/stories/${storyId}/scenes/reorder`, { method: "PUT", body: JSON.stringify({ orderedIds }) }, token);
 }
 
+// Universes
+export async function getUniverses(token: string) {
+  return request<Universe[]>("/api/universes", {}, token);
+}
+
+export async function createUniverse(token: string, name: string, description?: string) {
+  return request<Universe>("/api/universes", { method: "POST", body: JSON.stringify({ name, description }) }, token);
+}
+
+export async function updateUniverse(token: string, id: number, name: string, description?: string) {
+  return request<Universe>(`/api/universes/${id}`, { method: "PUT", body: JSON.stringify({ name, description }) }, token);
+}
+
+export async function deleteUniverse(token: string, id: number) {
+  return request<void>(`/api/universes/${id}`, { method: "DELETE" }, token);
+}
+
+// Entity types
+export async function getEntityTypes(token: string) {
+  return request<EntityType[]>("/api/entity-types", {}, token);
+}
+
+// Entities
+export async function getEntities(token: string, params?: { universeId?: number; entityTypeId?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.universeId) qs.set("universeId", String(params.universeId));
+  if (params?.entityTypeId) qs.set("entityTypeId", String(params.entityTypeId));
+  const query = qs.toString() ? `?${qs}` : "";
+  return request<EntitySummary[]>(`/api/entities${query}`, {}, token);
+}
+
+export async function createEntity(token: string, body: EntityRequest) {
+  return request<EntitySummary>("/api/entities", { method: "POST", body: JSON.stringify(body) }, token);
+}
+
+export async function getEntity(token: string, id: number) {
+  return request<EntityDetail>(`/api/entities/${id}`, {}, token);
+}
+
+export async function updateEntity(token: string, id: number, body: EntityRequest) {
+  return request<EntitySummary>(`/api/entities/${id}`, { method: "PUT", body: JSON.stringify(body) }, token);
+}
+
+export async function deleteEntity(token: string, id: number) {
+  return request<void>(`/api/entities/${id}`, { method: "DELETE" }, token);
+}
+
 // Admin
 export async function getAdminUsers(token: string) {
   return request<AdminUser[]>("/api/admin/users", {}, token);
@@ -87,6 +134,84 @@ export type SceneSummary = {
 
 export type SceneFull = SceneSummary & {
   content: string;
+};
+
+export type Universe = {
+  id: number;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EntityTypeField = {
+  id: number;
+  key: string;
+  label: string;
+  valueType: string;
+  refEntityTypeId?: number;
+  isBuiltIn: boolean;
+  isRequired: boolean;
+  isGmOnly: boolean;
+  displayOrder: number;
+};
+
+export type EntityType = {
+  id: number;
+  name: string;
+  icon?: string;
+  color?: string;
+  isBuiltIn: boolean;
+  fields: EntityTypeField[];
+};
+
+export type EntitySummary = {
+  id: number;
+  name: string;
+  entityTypeId: number;
+  entityTypeName?: string;
+  entityTypeIcon?: string;
+  entityTypeColor?: string;
+  universeId?: number;
+  isPublic: boolean;
+  isSecret: boolean;
+  updatedAt: string;
+};
+
+export type EntityRequest = {
+  name: string;
+  entityTypeId: number;
+  universeId?: number;
+  isPublic: boolean;
+  isSecret: boolean;
+  fieldValues: { fieldId: number; textValue?: string; numberValue?: number; boolValue?: boolean; isSecret: boolean }[];
+  fieldRefValues: { fieldId: number; refEntityId: number; displayOrder: number; isSecret: boolean }[];
+};
+
+export type FieldValue = {
+  fieldId: number;
+  key: string;
+  valueType: string;
+  textValue?: string;
+  numberValue?: number;
+  boolValue?: boolean;
+  isSecret: boolean;
+};
+
+export type FieldRefValue = {
+  fieldId: number;
+  key: string;
+  refEntityId: number;
+  refEntityName: string;
+  refEntityTypeId: number;
+  displayOrder: number;
+  isSecret: boolean;
+};
+
+export type EntityDetail = EntitySummary & {
+  createdAt: string;
+  fieldValues: FieldValue[];
+  fieldRefValues: FieldRefValue[];
 };
 
 export type AdminUser = {
