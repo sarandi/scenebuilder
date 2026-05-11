@@ -38,6 +38,7 @@ export default function Dashboard() {
   const [expandedNoteStoryId, setExpandedNoteStoryId] = useState<number | null>(null);
   const [storyNotes, setStoryNotes] = useState<Record<number, StoryNote[]>>({});
   const [loadingNotes, setLoadingNotes] = useState<number | null>(null);
+  const [noteError, setNoteError] = useState<number | null>(null);
   const [editingNoteId, setEditingNoteId] = useState<number | "new" | null>(null);
   const [noteTitle, setNoteTitle] = useState("");
   const [noteContent, setNoteContent] = useState("");
@@ -132,6 +133,24 @@ export default function Dashboard() {
     setUniverses(prev => prev.filter(u => u.id !== id));
   };
 
+  const fetchStoryNotes = async (storyId: number) => {
+    setLoadingNotes(storyId);
+    setNoteError(null);
+    const token = await getToken();
+    if (token) {
+      try {
+        const notes = await getStoryNotes(token, storyId);
+        setStoryNotes(prev => ({ ...prev, [storyId]: notes }));
+      } catch {
+        setNoteError(storyId);
+      } finally {
+        setLoadingNotes(null);
+      }
+    } else {
+      setLoadingNotes(null);
+    }
+  };
+
   const handleToggleStoryNotes = async (storyId: number) => {
     if (expandedNoteStoryId === storyId) {
       setExpandedNoteStoryId(null);
@@ -141,18 +160,7 @@ export default function Dashboard() {
     setExpandedNoteStoryId(storyId);
     setEditingNoteId(null);
     if (!storyNotes[storyId]) {
-      setLoadingNotes(storyId);
-      const token = await getToken();
-      if (token) {
-        try {
-          const notes = await getStoryNotes(token, storyId);
-          setStoryNotes(prev => ({ ...prev, [storyId]: notes }));
-        } finally {
-          setLoadingNotes(null);
-        }
-      } else {
-        setLoadingNotes(null);
-      }
+      await fetchStoryNotes(storyId);
     }
   };
 
@@ -355,6 +363,11 @@ export default function Dashboard() {
                             <div style={{ paddingBottom: "16px", paddingLeft: "16px" }}>
                               {loadingNotes === story.id ? (
                                 <p style={{ color: "var(--fg-muted)", fontSize: "12px", fontFamily: "monospace" }}>loading notes...</p>
+                              ) : noteError === story.id ? (
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                  <p style={{ color: "var(--red)", fontSize: "12px", fontFamily: "monospace", margin: 0 }}>failed to load notes</p>
+                                  <button onClick={() => fetchStoryNotes(story.id)} style={{ background: "none", border: "none", color: "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", cursor: "pointer" }}>retry</button>
+                                </div>
                               ) : (
                                 <>
                                   {(storyNotes[story.id] ?? []).map(note => (
