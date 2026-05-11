@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import type { EditorEntity, SceneSummary, Universe } from "@/lib/api";
+import type { EditorEntity, SceneSummary, Universe, SceneNote } from "@/lib/api";
 import { EntityActionButtons } from "@/components/EntityActionButtons";
 
 type Props = {
@@ -23,6 +23,10 @@ type Props = {
   entityCounts?: Record<string, number>;
   lockedScenes?: Set<number>;
   onToggleLock?: (id: number) => void;
+  notes?: SceneNote[];
+  onNoteCreate?: (title: string, content: string) => void;
+  onNoteUpdate?: (id: number, title: string, content: string) => void;
+  onNoteDelete?: (id: number) => void;
 };
 
 export function Manifest({
@@ -30,8 +34,14 @@ export function Manifest({
   onSceneSelect, onSceneCreate, onSceneDelete, onSceneRename, onScenesReorder,
   storyUniverseIds, universes, onSceneUniverseChange, onEntityEdit, onEntityView, onEntityUnlink, onEntityHighlight, entityCounts,
   lockedScenes, onToggleLock,
+  notes, onNoteCreate, onNoteUpdate, onNoteDelete,
 }: Props) {
+  const [scenesOpen, setScenesOpen] = useState(true);
+  const [notesOpen, setNotesOpen] = useState(true);
   const [entitiesOpen, setEntitiesOpen] = useState(true);
+  const [editingNoteId, setEditingNoteId] = useState<number | "new" | null>(null);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const dragItem = useRef<number | null>(null);
@@ -70,16 +80,19 @@ export function Manifest({
 
         {/* Scenes */}
         <div style={{ flexShrink: 0 }}>
-          <div style={{ padding: "8px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
+          <button onClick={() => setScenesOpen(o => !o)} style={{ width: "100%", padding: "8px 16px", background: "none", border: "none", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
             <span style={{ fontSize: "10px", letterSpacing: "0.1em", color: "var(--fg-muted)", fontFamily: "monospace" }}>SCENES</span>
-            <button onClick={onSceneCreate} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: "18px", lineHeight: 1 }} title="New scene">+</button>
-          </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span onClick={e => { e.stopPropagation(); onSceneCreate?.(); }} style={{ color: "var(--accent)", fontSize: "18px", lineHeight: 1, cursor: "pointer" }} title="New scene">+</span>
+              <span style={{ color: "var(--fg-muted)", fontSize: "12px" }}>{scenesOpen ? "▲" : "▼"}</span>
+            </div>
+          </button>
 
-          {scenes.length === 0 && (
+          {scenesOpen && scenes.length === 0 && (
             <p style={{ padding: "16px", color: "var(--fg-muted)", fontSize: "13px", fontStyle: "italic" }}>No scenes yet. Click + to create one.</p>
           )}
 
-          {scenes.map((scene, index) => {
+          {scenesOpen && scenes.map((scene, index) => {
             const sceneUniversePool = storyUniverseIds.length > 0
               ? universes.filter(u => storyUniverseIds.includes(u.id))
               : universes;
@@ -156,6 +169,84 @@ export function Manifest({
             );
           })}
         </div>
+
+        {/* Notes */}
+        {currentSceneId !== null && (
+          <div style={{ flexShrink: 0 }}>
+            <button onClick={() => setNotesOpen(o => !o)} style={{ width: "100%", padding: "8px 16px", background: "none", border: "none", borderBottom: "1px solid var(--border)", borderTop: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}>
+              <span style={{ fontSize: "10px", letterSpacing: "0.1em", color: "var(--fg-muted)", fontFamily: "monospace" }}>NOTES</span>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span onClick={e => { e.stopPropagation(); setNoteTitle(""); setNoteContent(""); setEditingNoteId("new"); }} style={{ color: "var(--accent)", fontSize: "18px", lineHeight: 1, cursor: "pointer" }} title="New note">+</span>
+                <span style={{ color: "var(--fg-muted)", fontSize: "12px" }}>{notesOpen ? "▲" : "▼"}</span>
+              </div>
+            </button>
+
+            {notesOpen && (
+              <>
+                {editingNoteId === "new" && (
+                  <div style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <input
+                      autoFocus
+                      value={noteTitle}
+                      onChange={e => setNoteTitle(e.target.value)}
+                      placeholder="Note title..."
+                      style={{ background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--fg)", padding: "4px 8px", fontSize: "12px", fontFamily: "monospace", borderRadius: "3px", outline: "none" }}
+                    />
+                    <textarea
+                      value={noteContent}
+                      onChange={e => setNoteContent(e.target.value)}
+                      placeholder="Note content..."
+                      rows={4}
+                      style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--fg)", padding: "6px 8px", fontSize: "12px", fontFamily: "Georgia, serif", borderRadius: "3px", outline: "none", resize: "vertical" }}
+                    />
+                    <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                      <button onClick={() => setEditingNoteId(null)} style={{ background: "none", border: "1px solid var(--border)", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace", padding: "3px 8px", borderRadius: "3px" }}>cancel</button>
+                      <button onClick={() => { onNoteCreate?.(noteTitle, noteContent); setEditingNoteId(null); }} style={{ background: "var(--accent-dim)", border: "1px solid var(--accent)", color: "var(--accent)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace", padding: "3px 8px", borderRadius: "3px" }}>save</button>
+                    </div>
+                  </div>
+                )}
+
+                {(notes ?? []).length === 0 && editingNoteId !== "new" && (
+                  <p style={{ padding: "16px", color: "var(--fg-muted)", fontSize: "12px", fontStyle: "italic" }}>No notes for this scene.</p>
+                )}
+
+                {(notes ?? []).map(note => (
+                  <div key={note.id} style={{ padding: "10px 16px", borderBottom: "1px solid var(--border)" }}>
+                    {editingNoteId === note.id ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <input
+                          autoFocus
+                          value={noteTitle}
+                          onChange={e => setNoteTitle(e.target.value)}
+                          style={{ background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--fg)", padding: "4px 8px", fontSize: "12px", fontFamily: "monospace", borderRadius: "3px", outline: "none" }}
+                        />
+                        <textarea
+                          value={noteContent}
+                          onChange={e => setNoteContent(e.target.value)}
+                          rows={4}
+                          style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--fg)", padding: "6px 8px", fontSize: "12px", fontFamily: "Georgia, serif", borderRadius: "3px", outline: "none", resize: "vertical" }}
+                        />
+                        <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
+                          <button onClick={() => setEditingNoteId(null)} style={{ background: "none", border: "1px solid var(--border)", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace", padding: "3px 8px", borderRadius: "3px" }}>cancel</button>
+                          <button onClick={() => { onNoteUpdate?.(note.id, noteTitle, noteContent); setEditingNoteId(null); }} style={{ background: "var(--accent-dim)", border: "1px solid var(--accent)", color: "var(--accent)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace", padding: "3px 8px", borderRadius: "3px" }}>save</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: note.content ? "4px" : 0 }}>
+                          <span style={{ flex: 1, fontSize: "12px", fontFamily: "monospace", color: "var(--fg)", fontWeight: "bold", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{note.title || "Untitled"}</span>
+                          <button onClick={() => { setNoteTitle(note.title); setNoteContent(note.content); setEditingNoteId(note.id); }} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "12px", padding: "1px 3px" }} title="Edit">✎</button>
+                          <button onClick={() => onNoteDelete?.(note.id)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "12px", padding: "1px 3px" }} title="Delete">✕</button>
+                        </div>
+                        {note.content && <p style={{ margin: 0, fontSize: "12px", fontFamily: "Georgia, serif", color: "var(--fg-muted)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{note.content}</p>}
+                      </>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Referenced entities */}
         <div style={{ flexShrink: 0 }}>

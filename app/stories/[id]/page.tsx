@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import Link from "next/link";
-import { saveScene, updateScene, updateStory, getScenes, getScene, deleteScene, reorderScenes, getStory, getUniverses, getEntities, getEntityTypes, createEntity, toEditorEntity, type EditorEntity, type EntityType, type Universe } from "@/lib/api";
+import { saveScene, updateScene, updateStory, getScenes, getScene, deleteScene, reorderScenes, getStory, getUniverses, getEntities, getEntityTypes, createEntity, toEditorEntity, getSceneNotes, createSceneNote, updateSceneNote, deleteSceneNote, type EditorEntity, type EntityType, type Universe, type SceneNote } from "@/lib/api";
 import type { SceneSummary } from "@/lib/api";
 import { useAuth } from "@clerk/nextjs";
 import { Editor } from "@/components/Editor";
@@ -48,6 +48,7 @@ export default function StoryEditor() {
   });
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "idle">("idle");
   const [sceneTitle, setSceneTitle] = useState("");
+  const [notes, setNotes] = useState<SceneNote[]>([]);
   const sceneContentRef = useRef("");
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorResetRef = useRef<((content: string) => void) | null>(null);
@@ -176,9 +177,13 @@ export default function StoryEditor() {
     const token = await getToken();
     if (!token) return;
     try {
-      const full = await getScene(token, storyId, scene.id);
+      const [full, sceneNotes] = await Promise.all([
+        getScene(token, storyId, scene.id),
+        getSceneNotes(token, storyId, scene.id),
+      ]);
       setSceneId(full.id);
       setSceneTitle(full.title);
+      setNotes(sceneNotes);
       sceneContentRef.current = full.content;
       editorResetRef.current?.(full.content);
       const effectiveIds = full.universeIds?.length > 0 ? full.universeIds : storyUniverseIds;
@@ -216,6 +221,36 @@ export default function StoryEditor() {
     } catch {
       console.error("Failed to delete scene");
     }
+  };
+
+  const handleNoteCreate = async (title: string, content: string) => {
+    if (!sceneId) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const note = await createSceneNote(token, storyId, sceneId, title, content);
+      setNotes(prev => [...prev, note]);
+    } catch { console.error("Failed to create note"); }
+  };
+
+  const handleNoteUpdate = async (noteId: number, title: string, content: string) => {
+    if (!sceneId) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const note = await updateSceneNote(token, storyId, sceneId, noteId, title, content);
+      setNotes(prev => prev.map(n => n.id === noteId ? note : n));
+    } catch { console.error("Failed to update note"); }
+  };
+
+  const handleNoteDelete = async (noteId: number) => {
+    if (!sceneId) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      await deleteSceneNote(token, storyId, sceneId, noteId);
+      setNotes(prev => prev.filter(n => n.id !== noteId));
+    } catch { console.error("Failed to delete note"); }
   };
 
   const handleSceneRename = async (id: number, title: string) => {
@@ -392,6 +427,10 @@ export default function StoryEditor() {
             entityCounts={entityCounts}
             lockedScenes={lockedScenes}
             onToggleLock={toggleLock}
+            notes={notes}
+            onNoteCreate={handleNoteCreate}
+            onNoteUpdate={handleNoteUpdate}
+            onNoteDelete={handleNoteDelete}
           />
         </div>
 

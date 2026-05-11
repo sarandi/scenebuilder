@@ -236,6 +236,22 @@ export type EditorEntity = {
   aliases?: string[];
 };
 
+// Scene Notes
+export type SceneNote = { id: number; title: string; content: string; createdAt: string; updatedAt: string; };
+
+export async function getSceneNotes(token: string, storyId: number, sceneId: number) {
+  return request<SceneNote[]>(`/api/stories/${storyId}/scenes/${sceneId}/notes`, {}, token);
+}
+export async function createSceneNote(token: string, storyId: number, sceneId: number, title: string, content: string) {
+  return request<SceneNote>(`/api/stories/${storyId}/scenes/${sceneId}/notes`, { method: "POST", body: JSON.stringify({ title, content }) }, token);
+}
+export async function updateSceneNote(token: string, storyId: number, sceneId: number, noteId: number, title: string, content: string) {
+  return request<SceneNote>(`/api/stories/${storyId}/scenes/${sceneId}/notes/${noteId}`, { method: "PUT", body: JSON.stringify({ title, content }) }, token);
+}
+export async function deleteSceneNote(token: string, storyId: number, sceneId: number, noteId: number) {
+  return request<void>(`/api/stories/${storyId}/scenes/${sceneId}/notes/${noteId}`, { method: "DELETE" }, token);
+}
+
 export function toEditorEntity(s: EntitySummary): EditorEntity {
   let aliases: string[] | undefined;
   if (s.aliases) {
