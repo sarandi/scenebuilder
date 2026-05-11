@@ -26,6 +26,7 @@ type Props = {
   onEntityCountsChange: (counts: Record<string, number>) => void;
   onEntityEdit?: (id: number) => void;
   onEntityView?: (id: number) => void;
+  locked?: boolean;
 };
 
 type SelectionBubble = { text: string; x: number; y: number } | null;
@@ -75,7 +76,7 @@ function getLinkedEntities(editor: ReturnType<typeof useEditor>, allEntities: Ed
   return Array.from(linked.values());
 }
 
-export function Editor({ entities, entityTypes, onEntityCreate, onWordCountChange, onParagraphCountChange, onEntitiesChange, onContentChange, onResetRef, insertEntityRef, unlinkEntityRef, highlightEntityRef, onEntityCountsChange, onEntityEdit, onEntityView }: Props) {
+export function Editor({ entities, entityTypes, onEntityCreate, onWordCountChange, onParagraphCountChange, onEntitiesChange, onContentChange, onResetRef, insertEntityRef, unlinkEntityRef, highlightEntityRef, onEntityCountsChange, onEntityEdit, onEntityView, locked = false }: Props) {
   const [suggestion, setSuggestion] = useState<SuggestionState>(defaultSuggestion);
   const [hover, setHover] = useState<HoverState>(null);
   const [selectionBubble, setSelectionBubble] = useState<SelectionBubble>(null);
@@ -138,6 +139,11 @@ export function Editor({ entities, entityTypes, onEntityCreate, onWordCountChang
       onContentChange(JSON.stringify(editor.getJSON()));
     },
   });
+
+  useEffect(() => {
+    if (!editor || !locked) return;
+    editor.commands.blur();
+  }, [editor, locked]);
 
   useEffect(() => {
     if (!editor) return;
@@ -308,9 +314,14 @@ export function Editor({ entities, entityTypes, onEntityCreate, onWordCountChang
 
   return (
     <>
-      <EditorContent editor={editor} style={{ height: "100%" }} />
+      <div style={{ position: "relative", height: "100%" }}>
+        <EditorContent editor={editor} style={{ height: "100%" }} />
+        {locked && (
+          <div style={{ position: "absolute", inset: 0, cursor: "default", zIndex: 1 }} />
+        )}
+      </div>
 
-      {selectionBubble && entityTypes.length > 0 && (
+      {selectionBubble && !locked && entityTypes.length > 0 && (
         <div style={{
           position: "fixed",
           top: selectionBubble.y - 46,

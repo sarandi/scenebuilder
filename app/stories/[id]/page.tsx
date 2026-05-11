@@ -29,6 +29,7 @@ export default function StoryEditor() {
   const [poolOpen, setPoolOpen] = useState(false);
   const [wordCount, setWordCount] = useState(0);
   const [paragraphCount, setParagraphCount] = useState(0);
+  const [locked, setLocked] = useState(false);
   const [linkedEntities, setLinkedEntities] = useState<EditorEntity[]>([]);
   const [allEntities, setAllEntities] = useState<EditorEntity[]>([]);
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
@@ -172,6 +173,7 @@ export default function StoryEditor() {
       const full = await getScene(token, storyId, scene.id);
       setSceneId(full.id);
       setSceneTitle(full.title);
+      setLocked(false);
       sceneContentRef.current = full.content;
       editorResetRef.current?.(full.content);
       const effectiveIds = full.universeIds?.length > 0 ? full.universeIds : storyUniverseIds;
@@ -196,6 +198,7 @@ export default function StoryEditor() {
   };
 
   const handleSceneDelete = async (id: number) => {
+    if (!confirm("Delete this scene? This cannot be undone.")) return;
     const token = await getToken();
     if (!token) return;
     try {
@@ -382,6 +385,8 @@ export default function StoryEditor() {
             onEntityUnlink={entityId => unlinkEntityRef.current?.(entityId)}
             onEntityHighlight={entityId => highlightEntityRef.current?.(entityId)}
             entityCounts={entityCounts}
+            locked={locked}
+            onToggleLock={() => setLocked(l => !l)}
           />
         </div>
 
@@ -393,16 +398,17 @@ export default function StoryEditor() {
               <input
                 placeholder="Scene title..."
                 value={sceneTitle}
-                onChange={e => { setSceneTitle(e.target.value); triggerAutoSave(e.target.value, sceneContentRef.current); }}
-                style={{ flex: 1, background: "none", border: "none", outline: "none", color: "var(--fg)", fontSize: "17px", fontFamily: "Georgia, serif", minWidth: 0 }}
+                onChange={e => { if (locked) return; setSceneTitle(e.target.value); triggerAutoSave(e.target.value, sceneContentRef.current); }}
+                readOnly={locked}
+                style={{ flex: 1, background: "none", border: "none", outline: "none", color: "var(--fg)", fontSize: "17px", fontFamily: "Georgia, serif", minWidth: 0, cursor: locked ? "default" : "text" }}
               />
               <span style={{ fontSize: "11px", color: "var(--fg-muted)", fontFamily: "monospace", flexShrink: 0 }}>{wordCount}w · {paragraphCount}p</span>
               <span style={{ fontSize: "11px", color: saveStatus === "saved" ? "var(--green)" : saveStatus === "saving" ? "var(--accent)" : saveStatus === "unsaved" ? "var(--red)" : "var(--fg-muted)", fontFamily: "monospace", flexShrink: 0 }}>
                 {saveStatus === "saved" ? "saved" : saveStatus === "saving" ? "saving..." : saveStatus === "unsaved" ? "unsaved" : ""}
               </span>
-              <button onClick={() => handleSave(sceneTitle, sceneContentRef.current)} style={{ background: "none", border: "1px solid var(--border)", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace", flexShrink: 0, padding: "3px 8px", borderRadius: "4px" }}>save</button>
+              {!locked && <button onClick={() => handleSave(sceneTitle, sceneContentRef.current)} style={{ background: "none", border: "1px solid var(--border)", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace", flexShrink: 0, padding: "3px 8px", borderRadius: "4px" }}>save</button>}
             </div>
-            {saveStatus !== "idle" && sceneUniversePool.length > 1 && (
+            {!locked && saveStatus !== "idle" && sceneUniversePool.length > 1 && (
               <div style={{ display: "flex", gap: "4px", padding: "0 16px 8px", flexWrap: "wrap" }}>
                 {sceneUniversePool.map(u => {
                   const active = sceneUniverseIds.includes(u.id);
@@ -438,6 +444,7 @@ export default function StoryEditor() {
                 onEntityCreate={handleEntityCreate}
                 onWordCountChange={setWordCount}
                 onParagraphCountChange={setParagraphCount}
+                locked={locked}
                 onEntitiesChange={setLinkedEntities}
                 onContentChange={content => { sceneContentRef.current = content; triggerAutoSave(sceneTitle, content); }}
                 onResetRef={editorResetRef}
