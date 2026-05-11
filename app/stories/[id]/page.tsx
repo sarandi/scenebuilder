@@ -29,7 +29,6 @@ export default function StoryEditor() {
   const [poolOpen, setPoolOpen] = useState(false);
   const [wordCount, setWordCount] = useState(0);
   const [paragraphCount, setParagraphCount] = useState(0);
-  const [locked, setLocked] = useState(false);
   const [linkedEntities, setLinkedEntities] = useState<EditorEntity[]>([]);
   const [allEntities, setAllEntities] = useState<EditorEntity[]>([]);
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
@@ -40,6 +39,13 @@ export default function StoryEditor() {
   const sceneUniverseIdsRef = useRef<number[]>([]);
   const [scenes, setScenes] = useState<SceneSummary[]>([]);
   const [sceneId, setSceneId] = useState<number | null>(null);
+  const [lockedScenes, setLockedScenes] = useState<Set<number>>(new Set());
+  const locked = sceneId !== null && lockedScenes.has(sceneId);
+  const toggleLock = (id: number) => setLockedScenes(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | "idle">("idle");
   const [sceneTitle, setSceneTitle] = useState("");
   const sceneContentRef = useRef("");
@@ -173,7 +179,6 @@ export default function StoryEditor() {
       const full = await getScene(token, storyId, scene.id);
       setSceneId(full.id);
       setSceneTitle(full.title);
-      setLocked(false);
       sceneContentRef.current = full.content;
       editorResetRef.current?.(full.content);
       const effectiveIds = full.universeIds?.length > 0 ? full.universeIds : storyUniverseIds;
@@ -385,8 +390,8 @@ export default function StoryEditor() {
             onEntityUnlink={entityId => unlinkEntityRef.current?.(entityId)}
             onEntityHighlight={entityId => highlightEntityRef.current?.(entityId)}
             entityCounts={entityCounts}
-            locked={locked}
-            onToggleLock={() => setLocked(l => !l)}
+            lockedScenes={lockedScenes}
+            onToggleLock={toggleLock}
           />
         </div>
 

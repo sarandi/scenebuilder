@@ -21,15 +21,15 @@ type Props = {
   onEntityUnlink?: (entityId: string) => void;
   onEntityHighlight?: (entityId: string | null) => void;
   entityCounts?: Record<string, number>;
-  locked?: boolean;
-  onToggleLock?: () => void;
+  lockedScenes?: Set<number>;
+  onToggleLock?: (id: number) => void;
 };
 
 export function Manifest({
   entities, scenes, currentSceneId,
   onSceneSelect, onSceneCreate, onSceneDelete, onSceneRename, onScenesReorder,
   storyUniverseIds, universes, onSceneUniverseChange, onEntityEdit, onEntityView, onEntityUnlink, onEntityHighlight, entityCounts,
-  locked, onToggleLock,
+  lockedScenes, onToggleLock,
 }: Props) {
   const [entitiesOpen, setEntitiesOpen] = useState(true);
   const [renamingId, setRenamingId] = useState<number | null>(null);
@@ -112,21 +112,26 @@ export function Manifest({
                   )}
 
                   <div style={{ display: "flex", gap: "4px", flexShrink: 0 }}>
-                    {currentSceneId === scene.id && onToggleLock && (
-                      <button onClick={e => { e.stopPropagation(); onToggleLock(); }} style={{ background: "none", border: "none", color: locked ? "var(--accent)" : "var(--fg-muted)", cursor: "pointer", fontSize: "12px", padding: "2px" }} title={locked ? "Unlock" : "Lock"}>
-                        {locked ? "🔒" : "🔓"}
-                      </button>
-                    )}
-                    {!(currentSceneId === scene.id && locked) && (
-                      <>
-                        <button onClick={() => handleRenameStart(scene)} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "12px", padding: "2px" }} title="Rename">✎</button>
-                        <button onClick={() => onSceneDelete(scene.id)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "12px", padding: "2px" }} title="Delete">✕</button>
-                      </>
-                    )}
+                    {onToggleLock && (() => {
+                      const isLocked = lockedScenes?.has(scene.id) ?? false;
+                      return (
+                        <>
+                          <button onClick={e => { e.stopPropagation(); onToggleLock(scene.id); }} style={{ background: "none", border: "none", color: isLocked ? "var(--accent)" : "var(--fg-muted)", cursor: "pointer", fontSize: "12px", padding: "2px" }} title={isLocked ? "Unlock" : "Lock"}>
+                            {isLocked ? "🔒" : "🔓"}
+                          </button>
+                          {!isLocked && (
+                            <>
+                              <button onClick={() => handleRenameStart(scene)} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "12px", padding: "2px" }} title="Rename">✎</button>
+                              <button onClick={() => onSceneDelete(scene.id)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "12px", padding: "2px" }} title="Delete">✕</button>
+                            </>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
-                {sceneUniversePool.length > 0 && !(currentSceneId === scene.id && locked) && (
+                {sceneUniversePool.length > 0 && !(lockedScenes?.has(scene.id)) && (
                   <div style={{ display: "flex", gap: "4px", marginTop: "6px", paddingLeft: "20px", flexWrap: "wrap" }}>
                     {sceneUniversePool.map(u => {
                       const active = sceneUniversePool.length === 1 || (scene.universeIds ?? []).includes(u.id);
