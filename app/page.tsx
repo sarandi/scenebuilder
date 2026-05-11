@@ -1,8 +1,9 @@
 "use client";
 
-import { useAuth, useClerk, useUser } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getStories, createStory, updateStory, deleteStory, type Story,
   getUniverses, createUniverse, updateUniverse, deleteUniverse, type Universe,
@@ -14,11 +15,9 @@ type SidebarItem = "stories" | "universes";
 
 export default function Dashboard() {
   const { getToken } = useAuth();
-  const { signOut } = useClerk();
-  const { user } = useUser();
-  const isAdmin = user?.publicMetadata?.role === "admin";
+  const searchParams = useSearchParams();
+  const tab = (searchParams.get("tab") ?? "worlds") as Tab;
 
-  const [tab, setTab] = useState<Tab>("worlds");
   const [sidebarItem, setSidebarItem] = useState<SidebarItem>("stories");
 
   const [stories, setStories] = useState<Story[]>([]);
@@ -125,51 +124,8 @@ export default function Dashboard() {
     setUniverses(prev => prev.filter(u => u.id !== id));
   };
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "social", label: "Social" },
-    { key: "worlds", label: "My Worlds" },
-    { key: "others", label: "Others'" },
-    { key: "settings", label: "Settings" },
-  ];
-
   return (
-    <div style={{ minHeight: "100dvh", background: "var(--bg)", color: "var(--fg)", display: "flex", flexDirection: "column" }}>
-
-      {/* Top bar */}
-      <div style={{ borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
-        <div style={{ maxWidth: "1200px", margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "32px" }}>
-            <div style={{ display: "flex" }}>
-              {tabs.map(t => (
-                <button
-                  key={t.key}
-                  onClick={() => setTab(t.key)}
-                  style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    padding: "16px 16px", fontSize: "13px", fontFamily: "monospace",
-                    color: tab === t.key ? "var(--accent)" : "var(--fg-muted)",
-                    borderBottom: tab === t.key ? "2px solid var(--accent)" : "2px solid transparent",
-                    letterSpacing: "0.06em",
-                  }}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-            {isAdmin && (
-              <Link href="/admin" style={{ fontSize: "12px", color: "var(--fg-muted)", fontFamily: "monospace", textDecoration: "none" }}>admin</Link>
-            )}
-            <button
-              onClick={() => signOut(() => { window.location.href = "/sign-in"; })}
-              style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "12px", fontFamily: "monospace" }}
-            >
-              signout
-            </button>
-          </div>
-        </div>
-      </div>
+    <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
 
       {/* Body */}
       <div style={{ flex: 1, maxWidth: "1200px", margin: "0 auto", width: "100%", padding: "0 24px", display: "flex" }}>

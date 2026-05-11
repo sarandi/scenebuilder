@@ -98,7 +98,7 @@ export default function EntityTypePage() {
     <div style={{ minHeight: "100dvh", background: "var(--bg)", color: "var(--fg)", display: "flex", flexDirection: "column" }}>
 
       {/* Header */}
-      <div style={{ flexShrink: 0, background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "10px 24px", display: "flex", alignItems: "center", gap: "12px" }}>
+      <div style={{ flexShrink: 0, background: "var(--surface)", borderBottom: "1px solid var(--border)", padding: "10px 24px", paddingLeft: "var(--nav-safe-left, 24px)", paddingRight: "var(--nav-safe-right, 24px)", display: "flex", alignItems: "center", gap: "12px", transition: "padding 0.25s ease" }}>
         <Link href="/" style={{ color: "var(--fg-muted)", textDecoration: "none", fontSize: "12px", fontFamily: "monospace", flexShrink: 0 }}>← dashboard</Link>
         <span style={{ color: "var(--border)" }}>|</span>
         <span style={{ fontSize: "11px", color, fontFamily: "monospace", flexShrink: 0 }}>

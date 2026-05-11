@@ -21,8 +21,17 @@ body {
   color: var(--fg);
   font-family: 'Georgia', serif;
   font-size: 15px;
-  height: 100vh;
+  height: 100dvh;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#page-content {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 ::selection {
@@ -67,7 +76,8 @@ body {
 
 .main-layout {
   display: flex;
-  height: 100dvh;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 

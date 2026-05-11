@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback, useState } from "react";
 import Link from "next/link";
 import { saveScene, updateScene, updateStory, getScenes, getScene, deleteScene, reorderScenes, getStory, getUniverses, getEntities, getEntityTypes, createEntity, toEditorEntity, type EditorEntity, type EntityType, type Universe } from "@/lib/api";
 import type { SceneSummary } from "@/lib/api";
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useAuth } from "@clerk/nextjs";
 import { Editor } from "@/components/Editor";
 import { Manifest } from "@/components/Manifest";
 import { EntityEditModal } from "@/components/EntityEditModal";
@@ -20,7 +20,6 @@ export default function StoryEditor() {
   const storyId = Number(params.id);
 
   const { isLoaded, isSignedIn, getToken } = useAuth();
-  const { signOut } = useClerk();
 
   const [panelMode, setPanelMode] = useState<PanelMode>("manifest");
   const [search, setSearch] = useState("");
@@ -28,11 +27,8 @@ export default function StoryEditor() {
   const [modalEntityId, setModalEntityId] = useState<number | null>(null);
   const [viewEntityId, setViewEntityId] = useState<number | null>(null);
   const [poolOpen, setPoolOpen] = useState(false);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const userMenuTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const clearUserMenuTimer = () => { if (userMenuTimer.current) { clearTimeout(userMenuTimer.current); userMenuTimer.current = null; } };
-  const startUserMenuTimer = () => { clearUserMenuTimer(); userMenuTimer.current = setTimeout(() => setUserMenuOpen(false), 200); };
   const [wordCount, setWordCount] = useState(0);
+  const [paragraphCount, setParagraphCount] = useState(0);
   const [linkedEntities, setLinkedEntities] = useState<EditorEntity[]>([]);
   const [allEntities, setAllEntities] = useState<EditorEntity[]>([]);
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
@@ -301,84 +297,64 @@ export default function StoryEditor() {
   if (!isLoaded || !isSignedIn) return null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100dvh", overflow: "hidden" }}>
-      {/* Breadcrumb row */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 16px", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0 }}>
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflow: "hidden" }}>
+      {/* Story breadcrumb row */}
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingTop: "6px", paddingBottom: "6px", paddingLeft: "var(--nav-safe-left, 16px)", paddingRight: "var(--nav-safe-right, 16px)", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0, transition: "padding-left 0.25s ease, padding-right 0.25s ease" }}>
         <Link href="/" style={{ color: "var(--fg-muted)", fontSize: "12px", fontFamily: "monospace", textDecoration: "none", flexShrink: 0 }}>← stories</Link>
         <span style={{ color: "var(--border)", fontSize: "12px", flexShrink: 0 }}>|</span>
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
-          <input
-            value={storyTitle}
-            onChange={e => setStoryTitle(e.target.value)}
-            onBlur={handleStoryTitleSave}
-            style={{ background: "none", border: "none", outline: "none", color: "var(--fg)", fontSize: "13px", fontFamily: "monospace", minWidth: 0 }}
-          />
-          <div
-            style={{ position: "relative", flexShrink: 0 }}
-            onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPoolOpen(false); }}
-            tabIndex={-1}
-          >
-            <button
-              onClick={() => setPoolOpen(o => !o)}
-              style={{ background: "none", border: "1px solid var(--border)", color: storyUniverseIds.length > 0 ? "var(--fg)" : "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", padding: "3px 8px", borderRadius: "4px", cursor: "pointer" }}
-            >
-              {storyUniverseIds.length === 0
-                ? "universe pool ▾"
-                : storyUniverseIds.length === 1
-                  ? `${universes.find(u => u.id === storyUniverseIds[0])?.name ?? "1 universe"} ▾`
-                  : `${storyUniverseIds.length} universes ▾`}
-            </button>
-            {poolOpen && (
-              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "4px", zIndex: 50, minWidth: "160px", padding: "4px 0", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
-                {universes.length === 0
-                  ? <span style={{ display: "block", padding: "6px 12px", color: "var(--fg-muted)", fontSize: "12px", fontFamily: "monospace" }}>no universes yet</span>
-                  : universes.map(u => {
-                    const active = storyUniverseIds.includes(u.id);
-                    return (
-                      <label
-                        key={u.id}
-                        style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontFamily: "monospace", color: "var(--fg)" }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
-                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={active}
-                          onChange={() => handleStoryUniverseChange(active ? storyUniverseIds.filter(id => id !== u.id) : [...storyUniverseIds, u.id])}
-                          style={{ accentColor: "var(--accent)" }}
-                        />
-                        {u.name}
-                      </label>
-                    );
-                  })}
-              </div>
-            )}
-          </div>
-        </div>
+        <input
+          value={storyTitle}
+          onChange={e => setStoryTitle(e.target.value)}
+          onBlur={handleStoryTitleSave}
+          style={{ background: "none", border: "none", outline: "none", color: "var(--fg)", fontSize: "13px", fontFamily: "monospace", width: `${Math.max((storyTitle.length || 0) + 1, 12)}ch`, minWidth: 0, flexShrink: 1 }}
+        />
         <div
           style={{ position: "relative", flexShrink: 0 }}
-          onMouseEnter={() => { clearUserMenuTimer(); setUserMenuOpen(true); }}
-          onMouseLeave={startUserMenuTimer}
+          onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setPoolOpen(false); }}
+          tabIndex={-1}
         >
-          <button style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "14px", lineHeight: 1, padding: "2px 4px" }}>•••</button>
-          {userMenuOpen && (
-            <div style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "4px", zIndex: 50, minWidth: "120px", padding: "4px 0", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
-              <button
-                onClick={() => signOut(() => { window.location.href = "/sign-in"; })}
-                style={{ display: "block", width: "100%", background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "12px", fontFamily: "monospace", padding: "6px 12px", textAlign: "left" }}
-                onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
-                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-              >sign out</button>
+          <button
+            onClick={() => setPoolOpen(o => !o)}
+            style={{ background: "none", border: "1px solid var(--border)", color: storyUniverseIds.length > 0 ? "var(--fg)" : "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", padding: "3px 8px", borderRadius: "4px", cursor: "pointer" }}
+          >
+            {storyUniverseIds.length === 0
+              ? "universe pool ▾"
+              : storyUniverseIds.length === 1
+                ? `${universes.find(u => u.id === storyUniverseIds[0])?.name ?? "1 universe"} ▾`
+                : `${storyUniverseIds.length} universes ▾`}
+          </button>
+          {poolOpen && (
+            <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "4px", zIndex: 50, minWidth: "160px", padding: "4px 0", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
+              {universes.length === 0
+                ? <span style={{ display: "block", padding: "6px 12px", color: "var(--fg-muted)", fontSize: "12px", fontFamily: "monospace" }}>no universes yet</span>
+                : universes.map(u => {
+                  const active = storyUniverseIds.includes(u.id);
+                  return (
+                    <label
+                      key={u.id}
+                      style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontFamily: "monospace", color: "var(--fg)" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={active}
+                        onChange={() => handleStoryUniverseChange(active ? storyUniverseIds.filter(id => id !== u.id) : [...storyUniverseIds, u.id])}
+                        style={{ accentColor: "var(--accent)" }}
+                      />
+                      {u.name}
+                    </label>
+                  );
+                })}
             </div>
           )}
         </div>
+        <div style={{ flex: 1 }} />
         <button
           onClick={cyclePanel}
           style={{ background: "none", border: "none", color: panelMode !== "none" ? "var(--accent)" : "var(--fg-muted)", cursor: "pointer", fontSize: "18px", lineHeight: 1, flexShrink: 0, padding: "2px 4px" }}
           title="Toggle panels"
-        >
-          {panelIcon}
-        </button>
+        >{panelIcon}</button>
       </div>
 
       {/* Panels row */}
@@ -420,7 +396,7 @@ export default function StoryEditor() {
                 onChange={e => { setSceneTitle(e.target.value); triggerAutoSave(e.target.value, sceneContentRef.current); }}
                 style={{ flex: 1, background: "none", border: "none", outline: "none", color: "var(--fg)", fontSize: "17px", fontFamily: "Georgia, serif", minWidth: 0 }}
               />
-              <span style={{ fontSize: "11px", color: "var(--fg-muted)", fontFamily: "monospace", flexShrink: 0 }}>{wordCount}w</span>
+              <span style={{ fontSize: "11px", color: "var(--fg-muted)", fontFamily: "monospace", flexShrink: 0 }}>{wordCount}w · {paragraphCount}p</span>
               <span style={{ fontSize: "11px", color: saveStatus === "saved" ? "var(--green)" : saveStatus === "saving" ? "var(--accent)" : saveStatus === "unsaved" ? "var(--red)" : "var(--fg-muted)", fontFamily: "monospace", flexShrink: 0 }}>
                 {saveStatus === "saved" ? "saved" : saveStatus === "saving" ? "saving..." : saveStatus === "unsaved" ? "unsaved" : ""}
               </span>
@@ -461,6 +437,7 @@ export default function StoryEditor() {
                 entityTypes={entityTypes}
                 onEntityCreate={handleEntityCreate}
                 onWordCountChange={setWordCount}
+                onParagraphCountChange={setParagraphCount}
                 onEntitiesChange={setLinkedEntities}
                 onContentChange={content => { sceneContentRef.current = content; triggerAutoSave(sceneTitle, content); }}
                 onResetRef={editorResetRef}

@@ -16,6 +16,7 @@ type Props = {
   entityTypes: EntityType[];
   onEntityCreate: (name: string, entityTypeId: number) => Promise<EditorEntity | null>;
   onWordCountChange: (count: number) => void;
+  onParagraphCountChange: (count: number) => void;
   onEntitiesChange: (entities: EditorEntity[]) => void;
   onContentChange: (content: string) => void;
   onResetRef: React.RefObject<((content: string) => void) | null>;
@@ -74,7 +75,7 @@ function getLinkedEntities(editor: ReturnType<typeof useEditor>, allEntities: Ed
   return Array.from(linked.values());
 }
 
-export function Editor({ entities, entityTypes, onEntityCreate, onWordCountChange, onEntitiesChange, onContentChange, onResetRef, insertEntityRef, unlinkEntityRef, highlightEntityRef, onEntityCountsChange, onEntityEdit, onEntityView }: Props) {
+export function Editor({ entities, entityTypes, onEntityCreate, onWordCountChange, onParagraphCountChange, onEntitiesChange, onContentChange, onResetRef, insertEntityRef, unlinkEntityRef, highlightEntityRef, onEntityCountsChange, onEntityEdit, onEntityView }: Props) {
   const [suggestion, setSuggestion] = useState<SuggestionState>(defaultSuggestion);
   const [hover, setHover] = useState<HoverState>(null);
   const [selectionBubble, setSelectionBubble] = useState<SelectionBubble>(null);
@@ -128,6 +129,9 @@ export function Editor({ entities, entityTypes, onEntityCreate, onWordCountChang
       const text = editor.getText();
       const words = text.trim() === "" ? 0 : text.trim().split(/\s+/).length;
       onWordCountChange(words);
+      let paragraphs = 0;
+      editor.state.doc.forEach(node => { if (node.textContent.trim()) paragraphs++; });
+      onParagraphCountChange(paragraphs);
       const linked = getLinkedEntities(editor, entitiesRef.current);
       onEntitiesChange(linked);
       onEntityCountsChange(getEntityTextCounts(editor, linked));
