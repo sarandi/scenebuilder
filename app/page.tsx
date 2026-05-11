@@ -8,6 +8,7 @@ import {
   getStories, createStory, updateStory, deleteStory, type Story,
   getUniverses, createUniverse, updateUniverse, deleteUniverse, type Universe,
   getEntityTypes, getEntities, type EntityType,
+  getStoryNotes, createStoryNote, updateStoryNote, deleteStoryNote, type StoryNote,
 } from "@/lib/api";
 
 type Tab = "social" | "worlds" | "others" | "settings";
@@ -33,6 +34,13 @@ export default function Dashboard() {
 
   const [entityTypes, setEntityTypes] = useState<EntityType[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [expandedNoteStoryId, setExpandedNoteStoryId] = useState<number | null>(null);
+  const [storyNotes, setStoryNotes] = useState<Record<number, StoryNote[]>>({});
+  const [loadingNotes, setLoadingNotes] = useState<number | null>(null);
+  const [editingNoteId, setEditingNoteId] = useState<number | "new" | null>(null);
+  const [noteTitle, setNoteTitle] = useState("");
+  const [noteContent, setNoteContent] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -122,6 +130,59 @@ export default function Dashboard() {
     if (!token) return;
     await deleteUniverse(token, id);
     setUniverses(prev => prev.filter(u => u.id !== id));
+  };
+
+  const handleToggleStoryNotes = async (storyId: number) => {
+    if (expandedNoteStoryId === storyId) {
+      setExpandedNoteStoryId(null);
+      setEditingNoteId(null);
+      return;
+    }
+    setExpandedNoteStoryId(storyId);
+    setEditingNoteId(null);
+    if (!storyNotes[storyId]) {
+      setLoadingNotes(storyId);
+      const token = await getToken();
+      if (token) {
+        try {
+          const notes = await getStoryNotes(token, storyId);
+          setStoryNotes(prev => ({ ...prev, [storyId]: notes }));
+        } finally {
+          setLoadingNotes(null);
+        }
+      } else {
+        setLoadingNotes(null);
+      }
+    }
+  };
+
+  const handleNoteCreate = async (storyId: number) => {
+    const token = await getToken();
+    if (!token) return;
+    const note = await createStoryNote(token, storyId, noteTitle, noteContent);
+    setStoryNotes(prev => ({ ...prev, [storyId]: [...(prev[storyId] ?? []), note] }));
+    setEditingNoteId(null);
+    setNoteTitle("");
+    setNoteContent("");
+  };
+
+  const handleNoteUpdate = async (storyId: number, noteId: number) => {
+    const token = await getToken();
+    if (!token) return;
+    const note = await updateStoryNote(token, storyId, noteId, noteTitle, noteContent);
+    setStoryNotes(prev => ({ ...prev, [storyId]: (prev[storyId] ?? []).map(n => n.id === noteId ? note : n) }));
+    setEditingNoteId(null);
+    setNoteTitle("");
+    setNoteContent("");
+  };
+
+  const handleNoteDelete = async (storyId: number, noteId: number) => {
+    if (!confirm("Delete this note?")) return;
+    const token = await getToken();
+    if (!token) return;
+    await deleteStoryNote(token, storyId, noteId);
+    setStoryNotes(prev => ({ ...prev, [storyId]: (prev[storyId] ?? []).filter(n => n.id !== noteId) }));
+    if (editingNoteId === noteId) { setEditingNoteId(null); setNoteTitle(""); setNoteContent(""); }
   };
 
   return (
@@ -226,59 +287,145 @@ export default function Dashboard() {
                       {stories.length === 0 ? (
                         <p style={{ color: "var(--fg-muted)", fontSize: "14px", fontStyle: "italic" }}>No stories yet.</p>
                       ) : stories.map(story => (
-                        <div key={story.id} style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 0", borderBottom: "1px solid var(--border)" }}>
-                          {renamingStoryId === story.id ? (
-                            <input autoFocus value={renameStoryTitle} onChange={e => setRenameStoryTitle(e.target.value)}
-                              onKeyDown={e => { if (e.key === "Enter") handleRenameStory(story.id); if (e.key === "Escape") setRenamingStoryId(null); }}
-                              onBlur={() => handleRenameStory(story.id)}
-                              style={{ flex: 1, background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--fg)", padding: "4px 8px", fontSize: "15px", fontFamily: "Georgia, serif", borderRadius: "4px", outline: "none" }} />
-                          ) : (
-                            <Link href={`/stories/${story.id}`} style={{ flex: 1, color: "var(--fg)", textDecoration: "none", fontSize: "16px" }}>{story.title}</Link>
-                          )}
-                          <div
-                            style={{ position: "relative", flexShrink: 0 }}
-                            onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpenPoolStoryId(null); }}
-                            tabIndex={-1}
-                          >
-                            <button
-                              onClick={() => setOpenPoolStoryId(openPoolStoryId === story.id ? null : story.id)}
-                              style={{ background: "none", border: "1px solid var(--border)", color: story.universeIds.length > 0 ? "var(--fg)" : "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", padding: "3px 8px", borderRadius: "4px", cursor: "pointer" }}
-                            >
-                              {story.universeIds.length === 0
-                                ? "universe pool ▾"
-                                : story.universeIds.length === 1
-                                  ? `${story.universeNames[0]} ▾`
-                                  : `${story.universeIds.length} universes ▾`}
-                            </button>
-                            {openPoolStoryId === story.id && (
-                              <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "4px", zIndex: 50, minWidth: "160px", padding: "4px 0", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
-                                {universes.length === 0
-                                  ? <span style={{ display: "block", padding: "6px 12px", color: "var(--fg-muted)", fontSize: "12px", fontFamily: "monospace" }}>no universes yet</span>
-                                  : universes.map(u => {
-                                    const active = story.universeIds.includes(u.id);
-                                    return (
-                                      <label
-                                        key={u.id}
-                                        style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontFamily: "monospace", color: "var(--fg)" }}
-                                        onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
-                                        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={active}
-                                          onChange={() => handleStoryUniverseToggle(story.id, story.universeIds, u.id)}
-                                          style={{ accentColor: "var(--accent)" }}
-                                        />
-                                        {u.name}
-                                      </label>
-                                    );
-                                  })}
-                              </div>
+                        <div key={story.id} style={{ borderBottom: "1px solid var(--border)" }}>
+                          {/* Story row */}
+                          <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "12px 0" }}>
+                            {renamingStoryId === story.id ? (
+                              <input autoFocus value={renameStoryTitle} onChange={e => setRenameStoryTitle(e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") handleRenameStory(story.id); if (e.key === "Escape") setRenamingStoryId(null); }}
+                                onBlur={() => handleRenameStory(story.id)}
+                                style={{ flex: 1, background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--fg)", padding: "4px 8px", fontSize: "15px", fontFamily: "Georgia, serif", borderRadius: "4px", outline: "none" }} />
+                            ) : (
+                              <Link href={`/stories/${story.id}`} style={{ flex: 1, color: "var(--fg)", textDecoration: "none", fontSize: "16px" }}>{story.title}</Link>
                             )}
+                            <div
+                              style={{ position: "relative", flexShrink: 0 }}
+                              onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setOpenPoolStoryId(null); }}
+                              tabIndex={-1}
+                            >
+                              <button
+                                onClick={() => setOpenPoolStoryId(openPoolStoryId === story.id ? null : story.id)}
+                                style={{ background: "none", border: "1px solid var(--border)", color: story.universeIds.length > 0 ? "var(--fg)" : "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", padding: "3px 8px", borderRadius: "4px", cursor: "pointer" }}
+                              >
+                                {story.universeIds.length === 0
+                                  ? "universe pool ▾"
+                                  : story.universeIds.length === 1
+                                    ? `${story.universeNames[0]} ▾`
+                                    : `${story.universeIds.length} universes ▾`}
+                              </button>
+                              {openPoolStoryId === story.id && (
+                                <div style={{ position: "absolute", top: "calc(100% + 4px)", left: 0, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "4px", zIndex: 50, minWidth: "160px", padding: "4px 0", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
+                                  {universes.length === 0
+                                    ? <span style={{ display: "block", padding: "6px 12px", color: "var(--fg-muted)", fontSize: "12px", fontFamily: "monospace" }}>no universes yet</span>
+                                    : universes.map(u => {
+                                      const active = story.universeIds.includes(u.id);
+                                      return (
+                                        <label
+                                          key={u.id}
+                                          style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px 12px", cursor: "pointer", fontSize: "12px", fontFamily: "monospace", color: "var(--fg)" }}
+                                          onMouseEnter={e => (e.currentTarget.style.background = "var(--surface-2)")}
+                                          onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                                        >
+                                          <input
+                                            type="checkbox"
+                                            checked={active}
+                                            onChange={() => handleStoryUniverseToggle(story.id, story.universeIds, u.id)}
+                                            style={{ accentColor: "var(--accent)" }}
+                                          />
+                                          {u.name}
+                                        </label>
+                                      );
+                                    })}
+                                </div>
+                              )}
+                            </div>
+                            <span style={{ fontSize: "11px", color: "var(--fg-muted)", fontFamily: "monospace" }}>{story.sceneCount}sc</span>
+                            <button
+                              onClick={() => handleToggleStoryNotes(story.id)}
+                              style={{ background: "none", border: "none", color: expandedNoteStoryId === story.id ? "var(--accent)" : "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}
+                            >
+                              notes {expandedNoteStoryId === story.id ? "▲" : "▼"}
+                            </button>
+                            <button onClick={() => { setRenamingStoryId(story.id); setRenameStoryTitle(story.title); }} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>rename</button>
+                            <button onClick={() => handleDeleteStory(story.id)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>delete</button>
                           </div>
-                          <span style={{ fontSize: "11px", color: "var(--fg-muted)", fontFamily: "monospace" }}>{story.sceneCount}sc</span>
-                          <button onClick={() => { setRenamingStoryId(story.id); setRenameStoryTitle(story.title); }} style={{ background: "none", border: "none", color: "var(--fg-muted)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>rename</button>
-                          <button onClick={() => handleDeleteStory(story.id)} style={{ background: "none", border: "none", color: "var(--red)", cursor: "pointer", fontSize: "11px", fontFamily: "monospace" }}>delete</button>
+
+                          {/* Notes panel */}
+                          {expandedNoteStoryId === story.id && (
+                            <div style={{ paddingBottom: "16px", paddingLeft: "16px" }}>
+                              {loadingNotes === story.id ? (
+                                <p style={{ color: "var(--fg-muted)", fontSize: "12px", fontFamily: "monospace" }}>loading notes...</p>
+                              ) : (
+                                <>
+                                  {(storyNotes[story.id] ?? []).map(note => (
+                                    <div key={note.id} style={{ marginBottom: "10px" }}>
+                                      {editingNoteId === note.id ? (
+                                        <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                                          <input
+                                            autoFocus
+                                            value={noteTitle}
+                                            onChange={e => setNoteTitle(e.target.value)}
+                                            placeholder="Title..."
+                                            style={{ background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--fg)", padding: "4px 8px", fontSize: "12px", fontFamily: "monospace", borderRadius: "4px", outline: "none" }}
+                                          />
+                                          <textarea
+                                            value={noteContent}
+                                            onChange={e => setNoteContent(e.target.value)}
+                                            placeholder="Content..."
+                                            rows={4}
+                                            style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--fg)", padding: "6px 8px", fontSize: "12px", fontFamily: "monospace", borderRadius: "4px", outline: "none", resize: "vertical" }}
+                                          />
+                                          <div style={{ display: "flex", gap: "8px" }}>
+                                            <button onClick={() => handleNoteUpdate(story.id, note.id)} style={{ background: "var(--accent-dim)", border: "1px solid var(--accent)", color: "var(--accent)", padding: "3px 10px", fontSize: "11px", fontFamily: "monospace", borderRadius: "4px", cursor: "pointer" }}>save</button>
+                                            <button onClick={() => { setEditingNoteId(null); setNoteTitle(""); setNoteContent(""); }} style={{ background: "none", border: "none", color: "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", cursor: "pointer" }}>cancel</button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <div style={{ display: "flex", gap: "12px", alignItems: "flex-start" }}>
+                                          <div style={{ flex: 1 }}>
+                                            {note.title && <div style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--fg)", fontWeight: 600, marginBottom: "2px" }}>{note.title}</div>}
+                                            <div style={{ fontSize: "12px", fontFamily: "monospace", color: "var(--fg-muted)", whiteSpace: "pre-wrap" }}>{note.content}</div>
+                                          </div>
+                                          <button onClick={() => { setEditingNoteId(note.id); setNoteTitle(note.title); setNoteContent(note.content); }} style={{ background: "none", border: "none", color: "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", cursor: "pointer", flexShrink: 0 }}>edit</button>
+                                          <button onClick={() => handleNoteDelete(story.id, note.id)} style={{ background: "none", border: "none", color: "var(--red)", fontSize: "11px", fontFamily: "monospace", cursor: "pointer", flexShrink: 0 }}>delete</button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+
+                                  {editingNoteId === "new" ? (
+                                    <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "8px" }}>
+                                      <input
+                                        autoFocus
+                                        value={noteTitle}
+                                        onChange={e => setNoteTitle(e.target.value)}
+                                        placeholder="Title..."
+                                        style={{ background: "var(--surface-2)", border: "1px solid var(--accent)", color: "var(--fg)", padding: "4px 8px", fontSize: "12px", fontFamily: "monospace", borderRadius: "4px", outline: "none" }}
+                                      />
+                                      <textarea
+                                        value={noteContent}
+                                        onChange={e => setNoteContent(e.target.value)}
+                                        placeholder="Content..."
+                                        rows={4}
+                                        style={{ background: "var(--surface-2)", border: "1px solid var(--border)", color: "var(--fg)", padding: "6px 8px", fontSize: "12px", fontFamily: "monospace", borderRadius: "4px", outline: "none", resize: "vertical" }}
+                                      />
+                                      <div style={{ display: "flex", gap: "8px" }}>
+                                        <button onClick={() => handleNoteCreate(story.id)} style={{ background: "var(--accent-dim)", border: "1px solid var(--accent)", color: "var(--accent)", padding: "3px 10px", fontSize: "11px", fontFamily: "monospace", borderRadius: "4px", cursor: "pointer" }}>save</button>
+                                        <button onClick={() => { setEditingNoteId(null); setNoteTitle(""); setNoteContent(""); }} style={{ background: "none", border: "none", color: "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", cursor: "pointer" }}>cancel</button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => { setEditingNoteId("new"); setNoteTitle(""); setNoteContent(""); }}
+                                      style={{ background: "none", border: "1px dashed var(--border)", color: "var(--fg-muted)", fontSize: "11px", fontFamily: "monospace", padding: "4px 10px", borderRadius: "4px", cursor: "pointer", marginTop: "4px" }}
+                                    >
+                                      + new note
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </>

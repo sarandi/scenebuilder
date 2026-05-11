@@ -252,6 +252,22 @@ export async function deleteSceneNote(token: string, storyId: number, sceneId: n
   return request<void>(`/api/stories/${storyId}/scenes/${sceneId}/notes/${noteId}`, { method: "DELETE" }, token);
 }
 
+// Story Notes
+export type StoryNote = { id: number; title: string; content: string; createdAt: string; updatedAt: string; };
+
+export async function getStoryNotes(token: string, storyId: number) {
+  return request<StoryNote[]>(`/api/stories/${storyId}/notes`, {}, token);
+}
+export async function createStoryNote(token: string, storyId: number, title: string, content: string) {
+  return request<StoryNote>(`/api/stories/${storyId}/notes`, { method: "POST", body: JSON.stringify({ title, content }) }, token);
+}
+export async function updateStoryNote(token: string, storyId: number, noteId: number, title: string, content: string) {
+  return request<StoryNote>(`/api/stories/${storyId}/notes/${noteId}`, { method: "PUT", body: JSON.stringify({ title, content }) }, token);
+}
+export async function deleteStoryNote(token: string, storyId: number, noteId: number) {
+  return request<void>(`/api/stories/${storyId}/notes/${noteId}`, { method: "DELETE" }, token);
+}
+
 export function toEditorEntity(s: EntitySummary): EditorEntity {
   let aliases: string[] | undefined;
   if (s.aliases) {
